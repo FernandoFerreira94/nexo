@@ -10,23 +10,31 @@ import {
 } from '@nexo/shared'
 import {
   BookOpen,
+  Download,
   Headset,
+  ImagePlus,
   KeyRound,
   ListChecks,
+  MessageSquarePlus,
   SendHorizontal,
   TriangleAlert,
   Wifi,
+  Wrench,
+  X,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Logo, LogoMark } from '@/components/brand/logo'
 import { UserAvatar } from '@/components/brand/user-avatar'
 import { UserMenu } from '@/components/brand/user-menu'
-import { Badge } from '@/components/ui/badge'
+import { useInstallApp } from '@/components/pwa/install'
 import { Button } from '@/components/ui/button'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api } from '@/lib/api'
-import { formatTime } from '@/lib/format'
+import { formatDateTime, formatTime } from '@/lib/format'
 import { readEvents } from '@/lib/stream'
 import type { ChatMessage, ConversationState } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -58,6 +66,16 @@ const EMPTY_LIVE: LiveReply = {
   trace: null,
 }
 
+/** Foto anexada: fica só neste navegador (demonstração, não vai para o servidor). */
+type LocalPhoto = { name: string; url: string }
+
+/** Atalhos acima do campo de mensagem, para continuar a conversa sem pensar no que escrever. */
+const QUICK_ACTIONS = [
+  { icon: ListChecks, label: 'Ver meus chamados', text: 'Como estão os meus chamados?' },
+  { icon: Wrench, label: 'Relatar um problema', prefill: 'Estou com um problema: ' },
+  { icon: Headset, label: 'Falar com um analista', text: 'Quero falar com um analista' },
+] as const
+
 const SUGGESTIONS = [
   { icon: ListChecks, text: 'Como está o meu chamado?' },
   { icon: Wifi, text: 'Minha VPN está dando erro 809' },
@@ -71,7 +89,11 @@ export function ChatView({ user }: { user: { name: string; department: string } 
   const [pendingText, setPendingText] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [photo, setPhoto] = useState<LocalPhoto | null>(null)
+  const [sentPhotos, setSentPhotos] = useState<{ text: string; photo: LocalPhoto }[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const reload = useCallback(async () => {
     setData(await api<ConversationResponse>('/api/conversation'))
@@ -128,10 +150,43 @@ export function ChatView({ user }: { user: { name: string; department: string } 
   )
 
   const send = (text: string) => {
-    const trimmed = text.trim()
+    const trimmed = text.trim() || (photo ? 'Enviei uma foto do problema.' : '')
     if (!trimmed || live) return
+    if (photo) {
+      setSentPhotos((list) => [...list, { text: trimmed, photo }])
+      setPhoto(null)
+    }
     setInput('')
     void stream(post('/api/chat', { text: trimmed }), trimmed)
+  }
+
+  const pickPhoto = (file: File | undefined) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Escolha uma imagem (JPG, PNG ou similar).')
+      return
+    }
+    if (photo) URL.revokeObjectURL(photo.url)
+    setPhoto({ name: file.name, url: URL.createObjectURL(file) })
+    inputRef.current?.focus()
+  }
+
+  const newConversation = async () => {
+    if (live) return
+    setError(null)
+    try {
+      await api('/api/conversation/new', { method: 'POST' })
+      await reload()
+      inputRef.current?.focus()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não consegui começar uma nova conversa.')
+    }
+  }
+
+  const onQuickAction = (action: (typeof QUICK_ACTIONS)[number]) => {
+    if ('text' in action) return send(action.text)
+    setInput(action.prefill)
+    inputRef.current?.focus()
   }
 
   const onQuickReply = (reply: QuickReply) => {
@@ -156,28 +211,24 @@ export function ChatView({ user }: { user: { name: string; department: string } 
   const messages = data?.messages ?? []
   const pendingDraft = data?.pendingDraft ?? null
   const lastAgentIndex = messages.findLastIndex((m) => m.role === 'agent')
+  const withHuman = status === 'waiting_analyst' || status === 'with_analyst'
+  const firstMessage = messages[0]
+  // Foto de cada mensagem enviada: a última mensagem com o mesmo texto fica com a foto.
+  const photoFor = (message: ChatMessage) =>
+    sentPhotos.findLast(
+      (p) =>
+        p.text === message.content &&
+        messages.findLast((m) => m.role === 'employee' && m.content === p.text)?.id === message.id,
+    )?.photo
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-b bg-card/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-3 px-4">
-          <Logo subtitle="Service desk de TI" />
-          <div className="flex items-center gap-3">
-            {status && (
-              <Badge variant={status === 'with_agent' ? 'success' : 'warning'}>
-                <span
-                  className={cn(
-                    'size-1.5 rounded-full',
-                    status === 'with_agent' ? 'bg-success' : 'bg-warning',
-                  )}
-                />
-                {CONVERSATION_STATUS_LABELS[status]}
-              </Badge>
-            )}
-            <UserMenu name={user.name} detail={user.department} role="employee" />
-          </div>
-        </div>
-      </header>
+      <ChatHeader
+        user={user}
+        status={status}
+        canStartNew={!withHuman && !live && messages.length > 0}
+        onNewConversation={newConversation}
+      />
 
       <main className="flex-1 overflow-y-auto">
         <div
@@ -191,10 +242,29 @@ export function ChatView({ user }: { user: { name: string; department: string } 
             <Welcome name={user.name.split(' ')[0] ?? user.name} onPick={send} />
           )}
 
+          {firstMessage && (
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
+              <span>Conversa iniciada em {formatDateTime(firstMessage.createdAt)}</span>
+              {!withHuman && status !== 'closed' && (
+                <>
+                  <span aria-hidden>·</span>
+                  <button
+                    type="button"
+                    onClick={() => void newConversation()}
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Começar uma nova
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
           {messages.map((message, index) => (
             <MessageItem
               key={message.id}
               message={message}
+              photo={photoFor(message)}
               pendingDraft={pendingDraft}
               onDraftAction={onDraftAction}
               onQuickReply={
@@ -205,7 +275,12 @@ export function ChatView({ user }: { user: { name: string; department: string } 
             />
           ))}
 
-          {pendingText && <EmployeeBubble text={pendingText} />}
+          {pendingText && (
+            <EmployeeBubble
+              text={pendingText}
+              photo={sentPhotos.findLast((p) => p.text === pendingText)?.photo}
+            />
+          )}
           {live && <LiveItem live={live} />}
 
           {status && status !== 'with_agent' && !live && <HandoffBanner status={status} />}
@@ -221,37 +296,105 @@ export function ChatView({ user }: { user: { name: string; department: string } 
             send(input)
           }}
         >
-          <div className="flex items-end gap-2 rounded-xl border bg-card p-2 shadow-sm transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20">
-            <label htmlFor="message" className="sr-only">
-              Mensagem
-            </label>
-            <Textarea
-              id="message"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  send(input)
+          {messages.length > 0 && status === 'with_agent' && !live && (
+            <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+              {QUICK_ACTIONS.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  onClick={() => onQuickAction(action)}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-caption font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  <action.icon className="size-3.5" /> {action.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="rounded-xl border bg-card p-2 shadow-sm transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20">
+            {photo && (
+              <div className="mb-2 flex items-center gap-3 rounded-lg border bg-muted/50 p-2">
+                {/* URL local do navegador (blob:), por isso <img> e não next/image */}
+                <img src={photo.url} alt="" className="size-12 rounded-md object-cover" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-body font-medium">{photo.name}</p>
+                  <p className="text-caption text-muted-foreground">
+                    Demonstração: a foto fica só neste navegador.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Remover foto"
+                  onClick={() => {
+                    URL.revokeObjectURL(photo.url)
+                    setPhoto(null)
+                  }}
+                >
+                  <X />
+                </Button>
+              </div>
+            )}
+            <div className="flex items-end gap-1">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden
+                onChange={(e) => {
+                  pickPhoto(e.target.files?.[0])
+                  e.target.value = ''
+                }}
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Anexar foto"
+                    className="text-muted-foreground"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <ImagePlus />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Anexar foto do erro</TooltipContent>
+              </Tooltip>
+              <label htmlFor="message" className="sr-only">
+                Mensagem
+              </label>
+              <Textarea
+                ref={inputRef}
+                id="message"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    send(input)
+                  }
+                }}
+                rows={1}
+                maxLength={2000}
+                placeholder={
+                  status === 'closed'
+                    ? 'Escreva para começar uma nova conversa…'
+                    : 'Escreva sua mensagem…'
                 }
-              }}
-              rows={1}
-              maxLength={2000}
-              placeholder={
-                status === 'closed'
-                  ? 'Escreva para começar uma nova conversa…'
-                  : 'Descreva o problema ou pergunte algo…'
-              }
-              className="max-h-40 min-h-9 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
-            />
-            <Button
-              type="submit"
-              size="icon"
-              aria-label="Enviar"
-              disabled={!input.trim() || live !== null}
-            >
-              <SendHorizontal />
-            </Button>
+                className="max-h-40 min-h-9 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
+              />
+              <Button
+                type="submit"
+                size="icon"
+                aria-label="Enviar"
+                disabled={(!input.trim() && !photo) || live !== null}
+              >
+                <SendHorizontal />
+              </Button>
+            </div>
           </div>
           <p className="mt-2 text-center text-caption text-muted-foreground">
             O assistente só abre chamados com a sua confirmação.
@@ -267,6 +410,101 @@ export function ChatView({ user }: { user: { name: string; department: string } 
         </form>
       </footer>
     </div>
+  )
+}
+
+const STATUS_PILL: Record<ConversationState['status'], { label: string; dot: string }> = {
+  with_agent: { label: 'Assistente online', dot: 'bg-success' },
+  waiting_analyst: { label: 'Na fila de um analista', dot: 'bg-warning' },
+  with_analyst: { label: 'Com um analista', dot: 'bg-info' },
+  closed: { label: 'Atendimento encerrado', dot: 'bg-muted-foreground' },
+}
+
+/** Topo do chat: marca (volta ao início), situação da conversa, nova conversa e conta. */
+function ChatHeader({
+  user,
+  status,
+  canStartNew,
+  onNewConversation,
+}: {
+  user: { name: string; department: string }
+  status: ConversationState['status'] | undefined
+  canStartNew: boolean
+  onNewConversation: () => Promise<void>
+}) {
+  const { install } = useInstallApp()
+  const pill = status ? STATUS_PILL[status] : null
+  return (
+    <header className="sticky top-0 z-20 bg-card/85 backdrop-blur-md supports-[backdrop-filter]:bg-card/70">
+      <div className="mx-auto flex h-16 max-w-3xl items-center gap-3 px-4">
+        <Link
+          href="/"
+          aria-label="Nexo Assist, início"
+          className="rounded-lg outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <Logo subtitle="Service desk de TI" />
+        </Link>
+
+        {pill && (
+          <span
+            role="status"
+            className="ml-1 hidden items-center gap-2 rounded-full border bg-background/60 px-3 py-1 text-caption font-medium text-muted-foreground md:inline-flex"
+          >
+            <span className="relative flex size-2">
+              {status === 'with_agent' && (
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-50 motion-reduce:hidden" />
+              )}
+              <span className={cn('relative inline-flex size-2 rounded-full', pill.dot)} />
+            </span>
+            {pill.label}
+          </span>
+        )}
+
+        <div className="ml-auto flex items-center gap-1.5">
+          {install && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Instalar app"
+                  onClick={() => void install()}
+                >
+                  <Download />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Instalar o Nexo Assist neste dispositivo</TooltipContent>
+            </Tooltip>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!canStartNew}
+            onClick={() => void onNewConversation()}
+            aria-label="Nova conversa"
+          >
+            <MessageSquarePlus />
+            <span className="hidden sm:inline">Nova conversa</span>
+          </Button>
+          <span aria-hidden className="mx-1 hidden h-6 w-px bg-border sm:block" />
+          <UserMenu name={user.name} detail={user.department} role="employee">
+            <DropdownMenuItem disabled={!canStartNew} onSelect={() => void onNewConversation()}>
+              <MessageSquarePlus /> Nova conversa
+            </DropdownMenuItem>
+          </UserMenu>
+        </div>
+      </div>
+      {/* Linha com o degradê da marca no lugar da borda comum. */}
+      <div
+        aria-hidden
+        className="h-px bg-gradient-to-r from-transparent via-brand-from/50 to-transparent"
+      />
+      {pill && (
+        <p className="flex items-center justify-center gap-2 border-b bg-background/60 py-1 text-caption text-muted-foreground md:hidden">
+          <span className={cn('size-1.5 rounded-full', pill.dot)} /> {pill.label}
+        </p>
+      )}
+    </header>
   )
 }
 
@@ -309,11 +547,13 @@ function Welcome({ name, onPick }: { name: string; onPick: (text: string) => voi
 
 function MessageItem({
   message,
+  photo,
   pendingDraft,
   onDraftAction,
   onQuickReply,
 }: {
   message: ChatMessage
+  photo?: LocalPhoto | undefined
   pendingDraft: Draft | null
   onDraftAction: (draft: Draft, action: 'confirm' | 'cancel') => Promise<void>
   onQuickReply?: (reply: QuickReply) => void
@@ -328,7 +568,7 @@ function MessageItem({
     )
   }
   if (message.role === 'employee') {
-    return <EmployeeBubble text={message.content} time={message.createdAt} />
+    return <EmployeeBubble text={message.content} time={message.createdAt} photo={photo} />
   }
 
   return (
@@ -446,10 +686,26 @@ function ReplyBubble({
   )
 }
 
-function EmployeeBubble({ text, time }: { text: string; time?: string }) {
+function EmployeeBubble({
+  text,
+  time,
+  photo,
+}: {
+  text: string
+  time?: string
+  photo?: LocalPhoto | undefined
+}) {
   return (
     <div className="flex animate-in justify-end fade-in-0 slide-in-from-bottom-1 duration-300">
       <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-4 py-3 text-body text-primary-foreground shadow-sm">
+        {photo && (
+          // URL local do navegador (blob:), por isso <img> e não next/image
+          <img
+            src={photo.url}
+            alt={`Foto anexada: ${photo.name}`}
+            className="mb-2 max-h-60 w-full rounded-lg object-cover"
+          />
+        )}
         {text}
         {time && (
           <span className="mt-1.5 block text-right text-caption text-primary-foreground/70">

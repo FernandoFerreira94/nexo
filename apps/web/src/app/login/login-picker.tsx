@@ -1,8 +1,10 @@
 'use client'
 
-import { ArrowRight, LoaderCircle } from 'lucide-react'
+import { ArrowRight, Download, Headset, LoaderCircle, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { UserAvatar } from '@/components/brand/user-avatar'
+import { useInstallApp } from '@/components/pwa/install'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 
@@ -13,10 +15,15 @@ const ROLE_HINTS = {
   analyst: 'Atende a fila de conversas transferidas e vê como o assistente decidiu.',
 }
 
+/** Aba escolhida na cor primária da marca, para ficar claro qual perfil está aberto. */
+const ACTIVE_TAB =
+  'data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md'
+
 /** Login de demonstração: escolher o perfil e a pessoa já entra (sem senha). */
 export function LoginPicker({ users }: { users: DemoUser[] }) {
   const [busyEmail, setBusyEmail] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { install } = useInstallApp()
 
   async function enter(user: DemoUser) {
     setBusyEmail(user.email)
@@ -36,10 +43,14 @@ export function LoginPicker({ users }: { users: DemoUser[] }) {
   }
 
   return (
-    <Tabs defaultValue="employee" className="mt-8 gap-4">
-      <TabsList className="w-full">
-        <TabsTrigger value="employee">Funcionário</TabsTrigger>
-        <TabsTrigger value="analyst">Analista</TabsTrigger>
+    <Tabs defaultValue="employee" className="gap-4">
+      <TabsList className="h-11 w-full p-1">
+        <TabsTrigger value="employee" className={ACTIVE_TAB}>
+          <UserRound /> Funcionário
+        </TabsTrigger>
+        <TabsTrigger value="analyst" className={ACTIVE_TAB}>
+          <Headset /> Analista
+        </TabsTrigger>
       </TabsList>
 
       {(['employee', 'analyst'] as const).map((role) => (
@@ -83,6 +94,12 @@ export function LoginPicker({ users }: { users: DemoUser[] }) {
         <p role="alert" className="text-body text-destructive">
           {error}
         </p>
+      )}
+
+      {install && (
+        <Button variant="outline" className="w-full" onClick={() => void install()}>
+          <Download /> Instalar o app neste dispositivo
+        </Button>
       )}
     </Tabs>
   )

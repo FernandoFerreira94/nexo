@@ -67,6 +67,30 @@ export async function getLatestConversation(db: AppDb, userId: string): Promise<
   return latest ?? getActiveConversation(db, userId)
 }
 
+/**
+ * "Nova conversa" do funcionário: encerra a conversa atual com o assistente e abre outra.
+ * Com analista (ou na fila) não deixa: o atendimento humano precisa terminar antes.
+ */
+export async function startNewConversation(db: AppDb, userId: string): Promise<Conversation> {
+  const current = await getActiveConversation(db, userId)
+  if (current.status === 'waiting_analyst' || current.status === 'with_analyst') {
+    throw new ConflictError('Você está em atendimento com um analista. Termine com ele primeiro.')
+  }
+  const hasMessages = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(eq(messages.conversationId, current.id))
+    .get()
+  if (!hasMessages) return current // já é uma conversa nova
+  await addMessage(db, {
+    conversationId: current.id,
+    role: 'system',
+    content: 'Conversa encerrada pelo funcionário.',
+  })
+  await setStatus(db, current.id, 'closed', null)
+  return getActiveConversation(db, userId)
+}
+
 export async function getConversation(db: AppDb, id: string): Promise<Conversation> {
   const conversation = await db.select().from(conversations).where(eq(conversations.id, id)).get()
   if (!conversation) throw new NotFoundError('Conversa não encontrada.')

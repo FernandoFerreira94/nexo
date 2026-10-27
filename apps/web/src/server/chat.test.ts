@@ -20,7 +20,9 @@ import {
   NotFoundError,
   pruneStaleConversations,
   returnToAgent,
+  startNewConversation,
 } from './conversations'
+import { simulateQueue } from './demo'
 import { openAppDb } from './db/client'
 import { cancelDraft, confirmDraft } from './drafts'
 import type { Runtime } from './runtime'
@@ -172,6 +174,27 @@ describe('fluxo do chat', () => {
     expect(await pruneStaleConversations(rt.db, '2999-01-01T00:00:00Z')).toBe(1)
     const fresh = await getActiveConversation(rt.db, ana.id)
     expect(await listMessages(rt.db, fresh.id)).toHaveLength(0)
+  })
+
+  it('nova conversa encerra a atual; com analista não deixa', async () => {
+    const { rt } = await setup()
+    await collect(handleEmployeeMessage(rt, ana, 'Oi'))
+    const before = await getActiveConversation(rt.db, ana.id)
+    const fresh = await startNewConversation(rt.db, ana.id)
+    expect(fresh.id).not.toBe(before.id)
+    expect(await startNewConversation(rt.db, ana.id)).toMatchObject({ id: fresh.id }) // vazia: reaproveita
+
+    await collect(handleEmployeeMessage(rt, ana, 'Quero falar com um analista'))
+    await expect(startNewConversation(rt.db, ana.id)).rejects.toBeInstanceOf(ConflictError)
+  })
+
+  it('simulação de fila: crítico primeiro, um já em atendimento, sem duplicar', async () => {
+    const { rt } = await setup()
+    expect(await simulateQueue(rt.db)).toBe(4)
+    expect(await simulateQueue(rt.db)).toBe(0)
+    const queue = await listQueue(rt.db)
+    expect(queue[0]?.handoffReason).toBe('critical')
+    expect(queue.filter((c) => c.status === 'with_analyst')).toHaveLength(1)
   })
 
   it('conversa, estado e traces sobrevivem a reiniciar o processo', async () => {

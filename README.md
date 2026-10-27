@@ -13,7 +13,7 @@ e como **Marcos Alves** (analista) em outra para ver o atendimento dos dois lado
 2. _"A VPN dá erro 809 e não consigo trabalhar. Uso Windows 11."_ gera um rascunho com prioridade e prazo calculados. Nada é gravado até clicar em **Confirmar**.
 3. Abra **Como decidi** em qualquer resposta: intenção, ações, confiança, regras aplicadas e custo.
 4. _"Quero falar com um analista"_ coloca a conversa na fila. Como Marcos, **Assumir**, responder e **Encerrar**.
-5. No console, **Simular queda** derruba o sistema de chamados por 20 s: o assistente avisa, tenta de novo e não perde nada.
+5. No console, **Simular pedidos** enche a fila com casos de exemplo, e **Simular queda** derruba o sistema de chamados por 20 s: o assistente avisa, tenta de novo e não perde nada.
 
 ## Como rodar
 
@@ -52,6 +52,10 @@ DECISION_PROVIDER=llm                   # ou jev, para usar o modelo de decisão
 - **Marca:** logo em SVG (`components/brand/logo.tsx`): um "N" que liga dois pontos, a ideia de conexão
   entre quem pede ajuda e quem resolve. Splash de entrada uma vez por sessão.
 - Console com lateral escura para a fila, métricas no topo e o painel do funcionário à direita.
+- **Instalável (PWA):** no Chrome/Edge aparece "Instalar app" no login e no menu da conta; vira um app com janela própria no celular e no desktop. Sem internet, mostra uma página amigável.
+- **Navegação:** a logo volta ao início; "Nova conversa" encerra a atual e começa outra; "Trocar de perfil" volta ao login; atalhos acima do campo de mensagem (ver chamados, relatar problema, falar com analista).
+- **Foto (demonstração):** o funcionário anexa uma foto do erro e ela aparece na conversa, mas fica só no navegador; o servidor recebe apenas o texto.
+- **Simular pedidos (console):** coloca na fila pedidos de outros funcionários (crítico, pedido direto, baixa confiança e um já em atendimento), usando as mesmas funções do fluxo real, sem chamar o LLM.
 
 ## Arquitetura
 
@@ -119,7 +123,7 @@ corpo da requisição. O serviço de chamados responde 404 para chamado de outra
 - **E2E** do fluxo principal com Playwright.
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test   # 92 testes
+pnpm typecheck && pnpm lint && pnpm test   # 94 testes
 pnpm test:e2e                              # Playwright (sobe tudo sozinho)
 pnpm eval                                  # cenários com o modelo do .env
 ```

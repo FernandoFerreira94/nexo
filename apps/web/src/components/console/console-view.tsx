@@ -9,6 +9,7 @@ import {
 } from '@nexo/shared'
 import {
   ArrowLeft,
+  UsersRound,
   CircleCheck,
   Clock,
   Inbox,
@@ -198,6 +199,16 @@ export function ConsoleView({ analyst }: { analyst: Analyst }) {
               <li className="grid justify-items-center gap-2 px-4 py-10 text-center text-caption text-sidebar-muted">
                 <Inbox className="size-6" />
                 Nenhuma conversa aqui.
+                {all.length === 0 && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="mt-2"
+                    onClick={() => void act('/api/console/simulate')}
+                  >
+                    <UsersRound /> Simular pedidos
+                  </Button>
+                )}
               </li>
             )}
             {items.map((item) => (
@@ -275,9 +286,26 @@ export function ConsoleView({ analyst }: { analyst: Analyst }) {
               <Button
                 variant="outline"
                 size="sm"
+                aria-label="Simular pedidos"
+                onClick={() => act('/api/console/simulate')}
+              >
+                <UsersRound /> <span className="hidden sm:inline">Simular pedidos</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Demonstração: coloca pedidos de outros funcionários na fila (crítico, pedido direto,
+              baixa confiança e um já em atendimento).
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label="Simular queda"
                 onClick={() => act('/api/console/chaos', { downForSeconds: 20 })}
               >
-                <Zap /> Simular queda
+                <Zap /> <span className="hidden sm:inline">Simular queda</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent>

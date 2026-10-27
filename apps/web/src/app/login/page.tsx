@@ -1,6 +1,7 @@
 import { SEED_USERS } from '@nexo/shared'
 import { CircleCheck, Headset, Zap } from 'lucide-react'
 import { Logo } from '@/components/brand/logo'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoginPicker } from './login-picker'
 
 const HIGHLIGHTS = [
@@ -61,14 +62,27 @@ export default function LoginPage() {
         </p>
       </section>
 
-      <section className="flex items-center justify-center px-5 py-12">
-        <div className="w-full max-w-md">
-          <Logo subtitle="Service desk de TI" className="mb-10 lg:hidden" />
-          <h2 className="text-title">Entrar</h2>
-          <p className="mt-1 text-body text-muted-foreground">
-            Ambiente de demonstração: escolha um perfil e entre com um clique.
+      <section className="relative flex items-center justify-center overflow-hidden bg-muted/40 px-5 py-12">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-24 -top-24 size-80 rounded-full bg-brand-to/10 blur-3xl"
+        />
+        <div className="relative w-full max-w-md">
+          <Logo subtitle="Service desk de TI" className="mb-8 lg:hidden" />
+          <Card className="gap-6 shadow-lg shadow-primary/5">
+            <CardHeader>
+              <CardTitle className="text-title">Entrar</CardTitle>
+              <CardDescription className="text-body">
+                Ambiente de demonstração: escolha um perfil e entre com um clique.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LoginPicker users={users} />
+            </CardContent>
+          </Card>
+          <p className="mt-6 text-center text-caption text-muted-foreground">
+            Dica: abra o funcionário e o analista em abas diferentes para ver os dois lados.
           </p>
-          <LoginPicker users={users} />
         </div>
       </section>
     </main>

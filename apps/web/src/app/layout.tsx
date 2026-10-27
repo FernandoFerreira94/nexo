@@ -1,7 +1,8 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import type { ReactNode } from 'react'
 import { Splash, SPLASH_BOOT_SCRIPT } from '@/components/brand/splash'
+import { ServiceWorkerRegister } from '@/components/pwa/install'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import './globals.css'
 
@@ -12,7 +13,13 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 export const metadata: Metadata = {
   title: 'Nexo Assist',
   description: 'Service desk de TI da Nexo',
-  icons: { icon: '/icon.svg' },
+  applicationName: 'Nexo Assist',
+  icons: { icon: '/icon.svg', apple: '/icons/apple-touch-icon.png' },
+  appleWebApp: { capable: true, title: 'Nexo Assist', statusBarStyle: 'default' },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#2d50b8',
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -27,6 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body className="min-h-dvh font-sans">
         <Splash />
+        <ServiceWorkerRegister />
         <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>
