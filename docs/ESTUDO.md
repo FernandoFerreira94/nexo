@@ -6,6 +6,7 @@ prováveis com resposta, e onde mexer quando pedirem uma alteração ao vivo.
 ## 1. Mapa do código
 
 **packages/shared** (regras e tipos usados por todos)
+
 - `src/schemas/ticket.ts`: chamado, tipos (INC/REQ), categorias, prioridades, status e os rótulos em português.
 - `src/schemas/conversation.ts`: conversa, intenções, rascunho, cartões, trace e os eventos do streaming.
 - `src/rules/priority.ts`: `classifyPriority`, que decide a prioridade a partir dos sinais.
@@ -14,6 +15,7 @@ prováveis com resposta, e onde mexer quando pedirem uma alteração ao vivo.
 - `src/seed-users.ts`: usuários de demonstração.
 
 **apps/tickets-service** (o "legado")
+
 - `src/app.ts`: rotas HTTP (listar, detalhar, criar, atualizar, transferir), token, caos e erros.
 - `src/domain/tickets.ts`: regras do serviço: dono do chamado, numeração, comentário, reabertura.
 - `src/chaos.ts`: falhas simuladas (taxa de erro e janela de queda).
@@ -21,6 +23,7 @@ prováveis com resposta, e onde mexer quando pedirem uma alteração ao vivo.
 - `src/db/seed.ts`: os 8 chamados de exemplo, com datas relativas a agora.
 
 **packages/agent** (o assistente)
+
 - `src/run-turn.ts`: **o coração**. Os 5 passos de um turno e a montagem do trace.
 - `src/understanding.ts`: o passo "entender" com três motores: LLM, Jev e mock.
 - `src/tools.ts`: as tools, quais valem para cada intenção (`TOOLS_BY_INTENT`) e o registro das ações.
@@ -32,6 +35,7 @@ prováveis com resposta, e onde mexer quando pedirem uma alteração ao vivo.
 - `src/config.ts`: lê e valida o `.env`.
 
 **apps/web** (Next.js)
+
 - `src/server/chat.ts`: recebe a mensagem, decide se chama o agent, salva resposta, trace e rascunho.
 - `src/server/conversations.ts`: regras das conversas (retomar, transferir, assumir, devolver, encerrar, rascunhos).
 - `src/server/drafts.ts`: **o único lugar que grava no sistema de chamados** (botão Confirmar).
@@ -109,28 +113,31 @@ SSO real, observabilidade (OpenTelemetry com o trace), evals noturnos com o mode
 
 ## 4. Onde mexer ao vivo
 
-| Pedido | Onde | Teste a ajustar |
-|---|---|---|
-| Nova categoria | `CATEGORIES` e `CATEGORY_LABELS` em `shared/src/schemas/ticket.ts`; enum em `tickets-service/src/db/schema.ts` | `tickets-service/src/app.test.ts` |
-| Novo tipo de chamado | `TICKET_TYPES` e rótulos em `ticket.ts`; regex do `id` no schema `Ticket`; número inicial em `createTicket` (`tickets-service/src/domain/tickets.ts`) | `app.test.ts`, `priority.test.ts` |
-| Mudar prazo (SLA) | `SLA_BY_PRIORITY` e `SLA_LABELS` em `shared/src/rules/sla.ts` | `sla.test.ts` |
-| Mudar horário útil | `BUSINESS_HOURS` em `sla.ts` | `sla.test.ts` |
-| Mudar janela de reabertura | `REOPEN_WINDOW_DAYS` em `shared/src/rules/ticket-rules.ts` | `sla.test.ts` (canReopen), cenários `reabrir-*` |
-| Mudar limite de 30 mensagens | `SESSION_MESSAGE_LIMIT` e `SESSION_MESSAGE_WARN_AT` no `.env` | `apps/web/src/server/chat.test.ts` |
-| Mudar limiar de confiança | `CONFIDENCE_THRESHOLD` no `.env` | `rules.test.ts` |
-| Nova regra de prioridade | `classifyPriority` em `shared/src/rules/priority.ts` | `priority.test.ts` |
-| Nova regra de transferência | `decideHandoff` em `agent/src/rules/handoff.ts`; motivo novo em `HANDOFF_REASONS` (`conversation.ts`) e texto em `HANDOFF_REPLIES` (`prompts.ts`) | `rules.test.ts`, novo cenário em `evals/scenarios.ts` |
-| Nova tool | criar em `createTools` (`agent/src/tools.ts`) e liberar em `TOOLS_BY_INTENT` | cenário em `evals/scenarios.ts` |
-| Novo artigo | `ARTICLES` em `agent/src/knowledge/articles.ts` | cenário de dúvida em `evals` |
-| Trocar o modelo ou provedor | `LLM_MODEL` no `.env`; outro provedor: `createChatModel` em `agent/src/llm/model.ts` | `pnpm eval` |
-| Novo filtro no console | `ConsoleView` em `web/src/components/console/console-view.tsx` (estado do filtro e `items`) | E2E |
-| Novo campo no rascunho | schema `Draft` (`conversation.ts`), `inputSchema` e `nextDraft` de `draftTicket` (`tools.ts`), `DraftCard` (`cards.tsx`), envio em `submit` (`web/src/server/drafts.ts`) | `chat.test.ts` |
-| Novo status de chamado | `TICKET_STATUSES`, `TICKET_STATUS_LABELS` e, se contar como aberto, `OPEN_STATUSES` (`ticket.ts`); enum no schema do serviço; cor em `ticket-badges.tsx` | `app.test.ts` |
-| Mudar o tom das respostas | `buildAgentInstructions` em `agent/src/prompts.ts` | `pnpm eval` |
-| Mudar cores ou raio | variáveis em `:root` de `web/src/app/globals.css` | — |
-| Mudar tipografia | `@utility text-*` em `globals.css`; fonte em `web/src/app/layout.tsx` | — |
-| Mudar a logo | `LogoMark` em `web/src/components/brand/logo.tsx` e `public/icon.svg` | — |
-| Novo componente shadcn | copiar para `web/src/components/ui/` (o `components.json` já está configurado para o CLI `npx shadcn add`) | — |
+| Pedido                                | Onde                                                                                                                                                                     | Teste a ajustar                                       |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| Nova categoria                        | `CATEGORIES` e `CATEGORY_LABELS` em `shared/src/schemas/ticket.ts`; enum em `tickets-service/src/db/schema.ts`                                                           | `tickets-service/src/app.test.ts`                     |
+| Novo tipo de chamado                  | `TICKET_TYPES` e rótulos em `ticket.ts`; regex do `id` no schema `Ticket`; número inicial em `createTicket` (`tickets-service/src/domain/tickets.ts`)                    | `app.test.ts`, `priority.test.ts`                     |
+| Mudar prazo (SLA)                     | `SLA_BY_PRIORITY` e `SLA_LABELS` em `shared/src/rules/sla.ts`                                                                                                            | `sla.test.ts`                                         |
+| Mudar horário útil                    | `BUSINESS_HOURS` em `sla.ts`                                                                                                                                             | `sla.test.ts`                                         |
+| Trocar o banco (arquivo ↔ Turso)      | Só variáveis: `APP_DB_PATH` local, `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` na Vercel (`apps/web/src/server/runtime.ts`)                                                  | `chat.test.ts`                                        |
+| Separar de novo o serviço de chamados | `TICKETS_SERVICE_URL` com a URL dele em vez de `embedded` (`runtime.ts`)                                                                                                 | `client.test.ts`                                      |
+| Teto de uso da demo                   | `LLM_DAILY_TURN_LIMIT` e `DEMO_RESET_HOURS` (`server/chat.ts`, `runtime.ts`)                                                                                             | `chat.test.ts`                                        |
+| Mudar janela de reabertura            | `REOPEN_WINDOW_DAYS` em `shared/src/rules/ticket-rules.ts`                                                                                                               | `sla.test.ts` (canReopen), cenários `reabrir-*`       |
+| Mudar limite de 30 mensagens          | `SESSION_MESSAGE_LIMIT` e `SESSION_MESSAGE_WARN_AT` no `.env`                                                                                                            | `apps/web/src/server/chat.test.ts`                    |
+| Mudar limiar de confiança             | `CONFIDENCE_THRESHOLD` no `.env`                                                                                                                                         | `rules.test.ts`                                       |
+| Nova regra de prioridade              | `classifyPriority` em `shared/src/rules/priority.ts`                                                                                                                     | `priority.test.ts`                                    |
+| Nova regra de transferência           | `decideHandoff` em `agent/src/rules/handoff.ts`; motivo novo em `HANDOFF_REASONS` (`conversation.ts`) e texto em `HANDOFF_REPLIES` (`prompts.ts`)                        | `rules.test.ts`, novo cenário em `evals/scenarios.ts` |
+| Nova tool                             | criar em `createTools` (`agent/src/tools.ts`) e liberar em `TOOLS_BY_INTENT`                                                                                             | cenário em `evals/scenarios.ts`                       |
+| Novo artigo                           | `ARTICLES` em `agent/src/knowledge/articles.ts`                                                                                                                          | cenário de dúvida em `evals`                          |
+| Trocar o modelo ou provedor           | `LLM_MODEL` no `.env`; outro provedor: `createChatModel` em `agent/src/llm/model.ts`                                                                                     | `pnpm eval`                                           |
+| Novo filtro no console                | `ConsoleView` em `web/src/components/console/console-view.tsx` (estado do filtro e `items`)                                                                              | E2E                                                   |
+| Novo campo no rascunho                | schema `Draft` (`conversation.ts`), `inputSchema` e `nextDraft` de `draftTicket` (`tools.ts`), `DraftCard` (`cards.tsx`), envio em `submit` (`web/src/server/drafts.ts`) | `chat.test.ts`                                        |
+| Novo status de chamado                | `TICKET_STATUSES`, `TICKET_STATUS_LABELS` e, se contar como aberto, `OPEN_STATUSES` (`ticket.ts`); enum no schema do serviço; cor em `ticket-badges.tsx`                 | `app.test.ts`                                         |
+| Mudar o tom das respostas             | `buildAgentInstructions` em `agent/src/prompts.ts`                                                                                                                       | `pnpm eval`                                           |
+| Mudar cores ou raio                   | variáveis em `:root` de `web/src/app/globals.css`                                                                                                                        | —                                                     |
+| Mudar tipografia                      | `@utility text-*` em `globals.css`; fonte em `web/src/app/layout.tsx`                                                                                                    | —                                                     |
+| Mudar a logo                          | `LogoMark` em `web/src/components/brand/logo.tsx` e `public/icon.svg`                                                                                                    | —                                                     |
+| Novo componente shadcn                | copiar para `web/src/components/ui/` (o `components.json` já está configurado para o CLI `npx shadcn add`)                                                               | —                                                     |
 
 ## 5. Comandos úteis
 
@@ -146,3 +153,18 @@ pnpm db:reset            # recria os chamados (datas relativas a agora) e apaga 
 curl -X POST localhost:4010/__chaos -H 'x-service-token: troque-este-token-local' \
   -H 'content-type: application/json' -d '{"downForSeconds":30}'
 ```
+
+## 6. Perguntas sobre a publicação
+
+**Por que Turso e não Postgres?** O app já era SQLite. O Turso é SQLite hospedado: mudou só o driver e o
+acesso ficou assíncrono. Postgres exigiria reescrever schema e consultas no prazo.
+
+**O serviço de chamados não deveria ser separado?** Ele continua separado no código e no contrato HTTP.
+Na Vercel ele roda no mesmo processo porque lá não há um servidor de pé; o cliente chama o Hono direto
+(`app.request`). Para separar, basta apontar `TICKETS_SERVICE_URL` para a URL dele.
+
+**E se dois analistas clicarem em Assumir juntos?** O update só muda a linha se ela ainda estiver
+"aguardando analista". O segundo recebe 409 "Outro analista já assumiu". Há teste para isso.
+
+**Como protege o custo numa demo pública?** 20 mensagens por minuto por pessoa, 30 por conversa e um teto
+diário global contado no banco (`LLM_DAILY_TURN_LIMIT`).

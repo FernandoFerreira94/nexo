@@ -9,6 +9,7 @@ import {
   type LanguageModel,
   type TicketsClient,
 } from '@nexo/agent'
+import { pruneStaleConversations } from './conversations'
 import { DEFAULT_APP_DB_PATH, openAppDb, type AppDb } from './db/client'
 
 /** Tudo que o servidor precisa, criado uma vez por processo. */
@@ -19,6 +20,8 @@ export type Runtime = {
   decision: DecisionEngine
   tickets: TicketsClient
   authSecret: string
+  /** Teto global de respostas do assistente por dia (0 = sem teto). Protege o custo da demo. */
+  dailyTurnLimit: number
 }
 
 /** Valor de TICKETS_SERVICE_URL que liga o serviço de chamados dentro deste processo (Vercel). */
@@ -36,18 +39,31 @@ export async function createRuntime(
   const dbUrl = env.TURSO_DATABASE_URL ?? env.APP_DB_PATH ?? DEFAULT_APP_DB_PATH
   const dbToken = env.TURSO_AUTH_TOKEN
 
+  const db = await openAppDb(dbUrl, dbToken)
+  const resetHours = Number(env.DEMO_RESET_HOURS ?? 0)
+  if (resetHours > 0) {
+    await pruneStaleConversations(db, new Date(Date.now() - resetHours * 3_600_000).toISOString())
+  }
+
   return {
-    db: await openAppDb(dbUrl, dbToken),
+    db,
     config,
     model,
     decision: createDecisionEngine(config, model),
     tickets: createTicketsClient({
-      baseUrl: config.ticketsServiceUrl === EMBEDDED_TICKETS ? 'http://tickets.internal' : config.ticketsServiceUrl,
+      baseUrl:
+        config.ticketsServiceUrl === EMBEDDED_TICKETS
+          ? 'http://tickets.internal'
+          : config.ticketsServiceUrl,
       serviceToken: config.ticketsServiceToken,
       breaker: new CircuitBreaker(),
-      fetchFn: config.ticketsServiceUrl === EMBEDDED_TICKETS ? await embeddedFetch(env, config) : undefined,
+      fetchFn:
+        config.ticketsServiceUrl === EMBEDDED_TICKETS
+          ? await embeddedFetch(env, config)
+          : undefined,
     }),
     authSecret,
+    dailyTurnLimit: Number(env.LLM_DAILY_TURN_LIMIT ?? 0),
   }
 }
 

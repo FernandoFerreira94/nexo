@@ -7,7 +7,7 @@ import type {
   MessageRole,
   QuickReply,
 } from '@nexo/shared'
-import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import type { AppDb } from './db/client'
 import { conversations, decisionTraces, drafts, messages, users } from './db/schema'
@@ -53,6 +53,20 @@ export async function getActiveConversation(db: AppDb, userId: string): Promise<
   return created
 }
 
+/**
+ * O que a tela do funcionário mostra: a última conversa, mesmo encerrada (para ele ver
+ * "Atendimento encerrado"). A próxima mensagem abre uma nova via getActiveConversation.
+ */
+export async function getLatestConversation(db: AppDb, userId: string): Promise<Conversation> {
+  const latest = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.userId, userId))
+    .orderBy(desc(conversations.updatedAt))
+    .get()
+  return latest ?? getActiveConversation(db, userId)
+}
+
 export async function getConversation(db: AppDb, id: string): Promise<Conversation> {
   const conversation = await db.select().from(conversations).where(eq(conversations.id, id)).get()
   if (!conversation) throw new NotFoundError('Conversa não encontrada.')
@@ -71,10 +85,7 @@ export async function getOwnConversation(
 }
 
 /** Mensagens com o trace e com os cartões de rascunho no estado atual (enviado, descartado). */
-export async function listMessages(
-  db: AppDb,
-  conversationId: string,
-): Promise<MessageWithTrace[]> {
+export async function listMessages(db: AppDb, conversationId: string): Promise<MessageWithTrace[]> {
   const draftRows = await db
     .select()
     .from(drafts)
@@ -89,14 +100,14 @@ export async function listMessages(
     .orderBy(asc(messages.createdAt), sql`messages.rowid`)
     .all()
   return rows.map(({ message, trace }) => ({
-      ...message,
-      trace,
-      cards: message.cards.map((card): Card => {
-        const current = card.type === 'draft' ? draftStatus.get(card.draft.id) : undefined
-        if (card.type !== 'draft' || !current || current.version !== card.draft.version) return card
-        return { type: 'draft', draft: { ...card.draft, status: current.status } }
-      }),
-    }))
+    ...message,
+    trace,
+    cards: message.cards.map((card): Card => {
+      const current = card.type === 'draft' ? draftStatus.get(card.draft.id) : undefined
+      if (card.type !== 'draft' || !current || current.version !== card.draft.version) return card
+      return { type: 'draft', draft: { ...card.draft, status: current.status } }
+    }),
+  }))
 }
 
 export async function addMessage(
@@ -366,4 +377,37 @@ async function touch(db: AppDb, conversationId: string) {
     .set({ updatedAt: nowIso() })
     .where(eq(conversations.id, conversationId))
     .run()
+}
+
+// Demo publicada ----------------------------------------------------------
+
+/** Respostas do assistente desde `sinceIso`: base do teto diário de uso do LLM. */
+export async function countAgentTurnsSince(db: AppDb, sinceIso: string): Promise<number> {
+  const row = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(decisionTraces)
+    .where(gte(decisionTraces.createdAt, sinceIso))
+    .get()
+  return row?.count ?? 0
+}
+
+/**
+ * Na demo pública todos usam os mesmos usuários de exemplo. Conversas paradas há mais de
+ * algumas horas são apagadas para cada visitante encontrar o app limpo.
+ */
+export async function pruneStaleConversations(db: AppDb, olderThanIso: string): Promise<number> {
+  const stale = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(lt(conversations.updatedAt, olderThanIso))
+    .all()
+  const ids = stale.map((row) => row.id)
+  if (ids.length === 0) return 0
+  await db.batch([
+    db.delete(messages).where(inArray(messages.conversationId, ids)),
+    db.delete(decisionTraces).where(inArray(decisionTraces.conversationId, ids)),
+    db.delete(drafts).where(inArray(drafts.conversationId, ids)),
+    db.delete(conversations).where(inArray(conversations.id, ids)),
+  ])
+  return ids.length
 }

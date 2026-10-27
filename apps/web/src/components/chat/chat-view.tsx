@@ -84,8 +84,10 @@ export function ChatView({ user }: { user: { name: string; department: string } 
   // Com analista, o agent não responde: a tela consulta de tempos em tempos as mensagens novas.
   const status = data?.conversation.status
   useEffect(() => {
-    if (!status || status === 'with_agent' || live) return
-    const timer = setInterval(() => reload().catch(() => {}), 3000)
+    if (!status || status === 'with_agent' || status === 'closed' || live) return
+    const timer = setInterval(() => {
+      if (!document.hidden) reload().catch(() => {})
+    }, 3000)
     return () => clearInterval(timer)
   }, [status, live, reload])
 
@@ -100,13 +102,19 @@ export function ChatView({ user }: { user: { name: string; department: string } 
       setLive({ ...EMPTY_LIVE })
       try {
         const response = await request
+        if (response.status === 401) {
+          window.location.href = '/login'
+          return
+        }
         if (!response.ok) {
           const body = (await response.json().catch(() => ({}))) as { error?: string }
           throw new Error(body.error ?? 'Não consegui enviar.')
         }
-        await readEvents(response, (event) =>
-          setLive((current) => apply(current ?? EMPTY_LIVE, event)),
-        )
+        await readEvents(response, (event) => {
+          // Erro no meio da resposta: fica visível depois que o streaming termina.
+          if (event.type === 'error') setError(event.message)
+          setLive((current) => apply(current ?? EMPTY_LIVE, event))
+        })
         await reload()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Não consegui enviar.')
@@ -172,7 +180,11 @@ export function ChatView({ user }: { user: { name: string; department: string } 
       </header>
 
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto grid max-w-3xl gap-6 px-4 py-8">
+        <div
+          role="log"
+          aria-label="Conversa com o assistente"
+          className="mx-auto grid max-w-3xl gap-6 px-4 py-8"
+        >
           {!data && <LoadingState />}
 
           {data && messages.length === 0 && !pendingText && (
@@ -227,10 +239,9 @@ export function ChatView({ user }: { user: { name: string; department: string } 
               maxLength={2000}
               placeholder={
                 status === 'closed'
-                  ? 'Atendimento encerrado'
+                  ? 'Escreva para começar uma nova conversa…'
                   : 'Descreva o problema ou pergunte algo…'
               }
-              disabled={status === 'closed'}
               className="max-h-40 min-h-9 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
             />
             <Button
@@ -398,7 +409,7 @@ function AgentRow({
   return (
     <div
       className="flex animate-in gap-3 fade-in-0 slide-in-from-bottom-1 duration-300"
-      aria-live={live ? 'polite' : undefined}
+      aria-busy={live || undefined}
     >
       {role === 'analyst' ? (
         <UserAvatar name="Analista" role="analyst" className="mt-0.5 size-7" />
@@ -456,7 +467,7 @@ function HandoffBanner({ status }: { status: ConversationState['status'] }) {
       ? 'Sua conversa está na fila de um analista, com o resumo do que conversamos. Pode continuar escrevendo aqui.'
       : status === 'with_analyst'
         ? 'Você está falando com um analista.'
-        : 'Atendimento encerrado.'
+        : 'O analista encerrou este atendimento. Se precisar de algo mais, é só escrever: começo uma conversa nova.'
   return (
     <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
       <span className="grid size-8 shrink-0 place-items-center rounded-md bg-warning/15 text-warning">

@@ -1,4 +1,4 @@
-import { getActiveConversation, getPendingDraft, listMessages } from '@/server/conversations'
+import { getLatestConversation, getPendingDraft, listMessages } from '@/server/conversations'
 import { handle, json, requireUser } from '@/server/http'
 import { getRuntime } from '@/server/runtime'
 
@@ -7,7 +7,7 @@ export async function GET() {
   return handle(async () => {
     const user = await requireUser('employee')
     const { db } = await getRuntime()
-    const conversation = await getActiveConversation(db, user.id)
+    const conversation = await getLatestConversation(db, user.id)
     return json({
       conversation: {
         id: conversation.id,

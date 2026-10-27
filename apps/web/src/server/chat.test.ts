@@ -18,6 +18,7 @@ import {
   listMessages,
   listQueue,
   NotFoundError,
+  pruneStaleConversations,
   returnToAgent,
 } from './conversations'
 import { openAppDb } from './db/client'
@@ -42,6 +43,7 @@ async function setup(env: Record<string, string> = {}, dbPath = ':memory:') {
       sleep: async () => {},
     }),
     authSecret: 'segredo-de-teste',
+    dailyTurnLimit: Number(env.LLM_DAILY_TURN_LIMIT ?? 0),
   }
   return { rt, service }
 }
@@ -150,6 +152,26 @@ describe('fluxo do chat', () => {
     expect(first.some((e) => e.type === 'notice')).toBe(true)
     await collect(handleEmployeeMessage(rt, ana, 'Oi de novo'))
     expect((await getActiveConversation(rt.db, ana.id)).handoffReason).toBe('message_limit')
+  })
+
+  it('teto diário: passou do limite, responde sem chamar o modelo', async () => {
+    const { rt } = await setup({ LLM_DAILY_TURN_LIMIT: '1' })
+    const first = await collect(handleEmployeeMessage(rt, ana, 'Como está o meu chamado?'))
+    expect(first.some((e) => e.type === 'trace')).toBe(true)
+    const second = await collect(handleEmployeeMessage(rt, ana, 'Como está o meu chamado?'))
+    expect(second.some((e) => e.type === 'trace')).toBe(false)
+    expect(second.find((e) => e.type === 'text-delta')).toMatchObject({
+      text: expect.stringContaining('limite de uso'),
+    })
+  })
+
+  it('demo: conversas paradas são apagadas, as recentes ficam', async () => {
+    const { rt } = await setup()
+    await collect(handleEmployeeMessage(rt, ana, 'Oi'))
+    expect(await pruneStaleConversations(rt.db, '2000-01-01T00:00:00Z')).toBe(0)
+    expect(await pruneStaleConversations(rt.db, '2999-01-01T00:00:00Z')).toBe(1)
+    const fresh = await getActiveConversation(rt.db, ana.id)
+    expect(await listMessages(rt.db, fresh.id)).toHaveLength(0)
   })
 
   it('conversa, estado e traces sobrevivem a reiniciar o processo', async () => {

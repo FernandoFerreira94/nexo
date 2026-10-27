@@ -9,6 +9,7 @@ import {
 import type { HandoffReason, StreamEvent } from '@nexo/shared'
 import {
   addMessage,
+  countAgentTurnsSince,
   countEmployeeMessage,
   getActiveConversation,
   getConversation,
@@ -55,6 +56,17 @@ export async function* handleEmployeeMessage(
   )
   if (limit.status === 'blocked') {
     yield* transfer(rt, conversation, user, 'message_limit', text, history)
+    return
+  }
+
+  if (await dailyLimitReached(rt)) {
+    const message = await addMessage(rt.db, {
+      conversationId: conversation.id,
+      role: 'agent',
+      content: DAILY_LIMIT_REPLY,
+    })
+    yield { type: 'text-delta', text: DAILY_LIMIT_REPLY }
+    yield { type: 'done', messageId: message.id }
     return
   }
 
@@ -154,6 +166,17 @@ async function persistTurn(
     trace: result.trace,
   })
   return message.id
+}
+
+const DAILY_LIMIT_REPLY =
+  'Esta demonstração atingiu o limite de uso do assistente por hoje. Volte amanhã ou fale com um analista.'
+
+/** Teto global por dia (UTC), contado nos traces salvos: vale para todas as instâncias. */
+async function dailyLimitReached(rt: Runtime): Promise<boolean> {
+  if (rt.dailyTurnLimit <= 0) return false
+  const startOfDay = new Date()
+  startOfDay.setUTCHours(0, 0, 0, 0)
+  return (await countAgentTurnsSince(rt.db, startOfDay.toISOString())) >= rt.dailyTurnLimit
 }
 
 /** Histórico para o modelo: falas do analista entram marcadas; avisos do sistema ficam de fora. */

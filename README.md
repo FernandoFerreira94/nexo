@@ -4,6 +4,17 @@ Assistente de chat do service desk de TI da Nexo, com console para os analistas.
 O funcionário tira dúvidas, consulta e abre chamados conversando; o analista recebe as
 conversas que precisam de uma pessoa, já com o resumo, e vê como o assistente decidiu cada resposta.
 
+**Demo:** _link da Vercel entra aqui depois de publicar._ Entre como **Ana Souza** (funcionária) numa aba
+e como **Marcos Alves** (analista) em outra para ver o atendimento dos dois lados.
+
+### Roteiro de 3 minutos
+
+1. Como Ana: _"Como está o meu chamado?"_ mostra os chamados e oferece analista para o INC-20311, que está vencido.
+2. _"A VPN dá erro 809 e não consigo trabalhar. Uso Windows 11."_ gera um rascunho com prioridade e prazo calculados. Nada é gravado até clicar em **Confirmar**.
+3. Abra **Como decidi** em qualquer resposta: intenção, ações, confiança, regras aplicadas e custo.
+4. _"Quero falar com um analista"_ coloca a conversa na fila. Como Marcos, **Assumir**, responder e **Encerrar**.
+5. No console, **Simular queda** derruba o sistema de chamados por 20 s: o assistente avisa, tenta de novo e não perde nada.
+
 ## Como rodar
 
 Pré-requisitos: Node 22+ e pnpm 10+.
@@ -69,14 +80,14 @@ flowchart LR
   Tickets --> TicketsDB
 ```
 
-| Pasta | O que é |
-|---|---|
-| `packages/shared` | Tipos e schemas Zod (chamado, conversa, trace) e as regras puras: prioridade, prazo em horas úteis, vencido, reabertura. |
-| `packages/agent` | O assistente: entender, regras, tools, streaming e trace. Também o cliente HTTP do serviço de chamados. |
-| `apps/tickets-service` | O sistema de chamados "legado", separado de propósito, com banco próprio e falhas simuladas. |
-| `apps/web` | Next.js: login, chat, console, API e o banco do app. |
-| `evals` | 19 cenários roteirizados do desafio, rodando com o modelo mock (CI) ou o real (`pnpm eval`). |
-| `e2e` | Teste Playwright do fluxo principal. |
+| Pasta                  | O que é                                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `packages/shared`      | Tipos e schemas Zod (chamado, conversa, trace) e as regras puras: prioridade, prazo em horas úteis, vencido, reabertura. |
+| `packages/agent`       | O assistente: entender, regras, tools, streaming e trace. Também o cliente HTTP do serviço de chamados.                  |
+| `apps/tickets-service` | O sistema de chamados "legado", separado de propósito, com banco próprio e falhas simuladas.                             |
+| `apps/web`             | Next.js: login, chat, console, API e o banco do app.                                                                     |
+| `evals`                | 19 cenários roteirizados do desafio, rodando com o modelo mock (CI) ou o real (`pnpm eval`).                             |
+| `e2e`                  | Teste Playwright do fluxo principal.                                                                                     |
 
 ## Como o agent decide
 
@@ -108,7 +119,7 @@ corpo da requisição. O serviço de chamados responde 404 para chamado de outra
 - **E2E** do fluxo principal com Playwright.
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test   # 87 testes
+pnpm typecheck && pnpm lint && pnpm test   # 92 testes
 pnpm test:e2e                              # Playwright (sobe tudo sozinho)
 pnpm eval                                  # cenários com o modelo do .env
 ```
@@ -130,7 +141,8 @@ nos evals antes de adotar.
 
 - **AI SDK direto em vez de um framework de agents.** Menos camadas e cada passo do fluxo fica visível no código. Em troca, memória e orquestração são feitas à mão (são simples aqui).
 - **Busca de artigos por palavras-chave**, sem embeddings: com 8 artigos é suficiente e explicável. Com centenas, trocaria por embeddings.
-- **SQLite em arquivo**, um banco por serviço: zero infraestrutura e sobrevive a reinício. Não serve para várias instâncias.
+- **SQLite (libSQL)**: local é um arquivo, sem instalar nada; na Vercel é o Turso, o mesmo SQLite hospedado. Mesmo schema e mesmas consultas nos dois. Para muita escrita concorrente, trocaria por Postgres.
+- **Serviço de chamados embutido na Vercel**: lá ele roda dentro do app (`TICKETS_SERVICE_URL=embedded`), mas o app continua falando com ele por HTTP, com token, retry e circuit breaker. Separar de novo é trocar uma variável.
 - **Polling de 3 s no console** em vez de WebSocket/SSE: simples e suficiente para a demo.
 - **Vencido oferece analista em vez de transferir sozinho** (decisão D06): o funcionário pode só querer saber o status. O console destaca a conversa mesmo assim.
 - **Resumo de transferência por template**, sem LLM: instantâneo e não inventa fatos.
@@ -145,14 +157,30 @@ nos evals antes de adotar.
 - Observabilidade: trace exportado para OpenTelemetry, painel de custo e de transferências.
 - Autenticação real (SSO da empresa) no lugar do login de demonstração.
 
-## Deploy
+## Deploy (Vercel + Turso)
 
-Demo em um serviço só (`Dockerfile` + `render.yaml`): o serviço de chamados roda por dentro, na porta 4010,
-e o app web na porta pública. Roda em `LLM_PROVIDER=mock`, sem custo de LLM; `AUTH_SECRET` e o token do
-serviço são gerados pela plataforma. Os bancos SQLite são recriados a cada deploy com os dados de exemplo.
+Um projeto só na Vercel. O banco fica no Turso, porque a Vercel não guarda arquivos entre execuções.
 
-No Render: **New > Blueprint**, escolher este repositório e confirmar. Para usar o modelo real, definir
-`LLM_PROVIDER=openrouter`, `LLM_API_KEY` e `LLM_MODEL` nas variáveis do serviço (nunca no código).
+1. Na Vercel: **Add New > Project**, importar este repositório e definir **Root Directory = `apps/web`**.
+2. Em **Storage** (Marketplace), adicionar o **Turso** e ligar ao projeto. Ele cria `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN`.
+3. Em **Environment Variables**:
+
+| Variável                    | Valor                                                                 |
+| --------------------------- | --------------------------------------------------------------------- |
+| `AUTH_SECRET`               | texto longo e aleatório                                               |
+| `TICKETS_SERVICE_URL`       | `embedded`                                                            |
+| `TICKETS_SERVICE_TOKEN`     | texto aleatório                                                       |
+| `LLM_PROVIDER`              | `mock` (grátis) ou `openrouter`                                       |
+| `LLM_API_KEY` / `LLM_MODEL` | só com `openrouter`                                                   |
+| `LLM_DAILY_TURN_LIMIT`      | `300` (teto de respostas por dia, protege o custo)                    |
+| `DEMO_RESET_HOURS`          | `24` (apaga conversas paradas, para cada visitante achar o app limpo) |
+| `TICKETS_FAILURE_RATE`      | `0.05`                                                                |
+
+4. **Deploy.** As tabelas e os dados de exemplo são criados no primeiro acesso, e a semente dos chamados é
+   refeita a cada dia para a demo não envelhecer.
+
+**Limites de uso:** 20 mensagens por minuto por pessoa, 30 por conversa e o teto diário global acima, contado
+no banco (vale para todas as instâncias). Chaves só nas variáveis da plataforma, nunca no repositório.
 
 ## Documentação
 

@@ -8,6 +8,7 @@ import {
   type TicketSummary,
 } from '@nexo/shared'
 import {
+  ArrowLeft,
   CircleCheck,
   Clock,
   Inbox,
@@ -18,7 +19,7 @@ import {
   UserRoundCheck,
   Zap,
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageCard, TicketList } from '@/components/chat/cards'
 import { ActionLine, TracePanel } from '@/components/chat/trace-panel'
 import { Logo, LogoMark } from '@/components/brand/logo'
@@ -90,6 +91,7 @@ export function ConsoleView({ analyst }: { analyst: Analyst }) {
   // Quase tempo real: consulta a fila e a conversa aberta a cada 3 segundos.
   useEffect(() => {
     const tick = () => {
+      if (document.hidden) return // aba em segundo plano: não gasta requisições
       loadQueue().catch(() => {})
       loadDetail().catch(() => {})
     }
@@ -98,13 +100,16 @@ export function ConsoleView({ analyst }: { analyst: Analyst }) {
     return () => clearInterval(timer)
   }, [loadQueue, loadDetail])
 
-  const act = async (path: string, body?: unknown) => {
+  /** Executa uma ação do analista. Devolve se deu certo (a resposta só é apagada nesse caso). */
+  const act = async (path: string, body?: unknown): Promise<boolean> => {
     setError(null)
     try {
       await api(path, { method: 'POST', body: body ?? {} })
       await Promise.all([loadQueue(), loadDetail()])
+      return true
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Algo deu errado.')
+      return false
     }
   }
 
@@ -119,7 +124,13 @@ export function ConsoleView({ analyst }: { analyst: Analyst }) {
   return (
     <div className="grid h-dvh grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_340px]">
       {/* Fila */}
-      <aside className="flex min-h-0 flex-col bg-sidebar text-sidebar-foreground">
+      {/* No celular, uma coluna por vez: a fila ou a conversa aberta. */}
+      <aside
+        className={cn(
+          'flex min-h-0 flex-col bg-sidebar text-sidebar-foreground',
+          selectedId && 'hidden md:flex',
+        )}
+      >
         <div className="px-5 pb-4 pt-5">
           <Logo inverted subtitle="Console do analista" />
         </div>
@@ -239,10 +250,25 @@ export function ConsoleView({ analyst }: { analyst: Analyst }) {
       </aside>
 
       {/* Conversa */}
-      <section className="flex min-h-0 flex-col">
+      <section className={cn('min-h-0 flex-col', selectedId ? 'flex' : 'hidden md:flex')}>
         <header className="flex h-16 items-center justify-end gap-2 border-b bg-card px-5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mr-auto md:hidden"
+            onClick={() => {
+              setSelectedId(null)
+              setDetail(null)
+            }}
+          >
+            <ArrowLeft /> Fila
+          </Button>
           <Badge variant={serviceDown ? 'destructive' : 'success'}>
-            <Server /> Sistema de chamados {serviceDown ? 'instável' : 'operando'}
+            <Server />
+            <span className="sm:hidden">{serviceDown ? 'Instável' : 'Operando'}</span>
+            <span className="hidden sm:inline">
+              Sistema de chamados {serviceDown ? 'instável' : 'operando'}
+            </span>
           </Badge>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -261,7 +287,13 @@ export function ConsoleView({ analyst }: { analyst: Analyst }) {
         </header>
 
         {detail && selectedId ? (
-          <ConversationPanel detail={detail} analystId={analyst.id} act={act} error={error} />
+          <ConversationPanel
+            key={detail.conversation.id}
+            detail={detail}
+            analystId={analyst.id}
+            act={act}
+            error={error}
+          />
         ) : (
           <div className="grid flex-1 place-items-center p-8 text-center">
             <div className="grid justify-items-center gap-3">
@@ -308,16 +340,32 @@ function ConversationPanel({
 }: {
   detail: DetailResponse
   analystId: string
-  act: (path: string, body?: unknown) => Promise<void>
+  act: (path: string, body?: unknown) => Promise<boolean>
   error: string | null
 }) {
   const [reply, setReply] = useState('')
+  const [busy, setBusy] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
   const { conversation } = detail
   const base = `/api/console/conversations/${conversation.id}`
   const mine =
     conversation.status === 'with_analyst' && conversation.assignedAnalystId === analystId
   const cost = detail.messages.reduce((sum, m) => sum + (m.trace?.costUsd ?? 0), 0)
   const name = detail.employee?.name ?? 'Funcionário'
+  const closed = conversation.status === 'closed'
+
+  // Mensagem nova (do funcionário ou do assistente) rola a conversa até o fim.
+  const count = detail.messages.length
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [count])
+
+  const run = async (path: string, body?: unknown) => {
+    setBusy(true)
+    const ok = await act(path, body)
+    setBusy(false)
+    return ok
+  }
 
   return (
     <>
@@ -334,16 +382,16 @@ function ConversationPanel({
         </div>
         <div className="flex gap-2">
           {conversation.status === 'waiting_analyst' && (
-            <Button onClick={() => act(`${base}/assume`)}>
+            <Button onClick={() => run(`${base}/assume`)} disabled={busy}>
               <UserRoundCheck /> Assumir
             </Button>
           )}
           {mine && (
             <>
-              <Button variant="outline" onClick={() => act(`${base}/return`)}>
+              <Button variant="outline" onClick={() => run(`${base}/return`)} disabled={busy}>
                 <RotateCcw /> Devolver ao assistente
               </Button>
-              <Button variant="outline" onClick={() => act(`${base}/close`)}>
+              <Button variant="outline" onClick={() => run(`${base}/close`)} disabled={busy}>
                 <CircleCheck /> Encerrar
               </Button>
             </>
@@ -417,6 +465,7 @@ function ConversationPanel({
               </div>
             ),
           )}
+          <div ref={bottomRef} />
         </div>
       </ScrollArea>
 
@@ -424,8 +473,8 @@ function ConversationPanel({
         className="border-t bg-card px-5 py-4"
         onSubmit={(e) => {
           e.preventDefault()
-          if (!reply.trim()) return
-          void act(`${base}/reply`, { text: reply }).then(() => setReply(''))
+          if (!reply.trim() || busy) return
+          void run(`${base}/reply`, { text: reply }).then((ok) => ok && setReply(''))
         }}
       >
         <div className="mx-auto flex max-w-2xl gap-2">
@@ -434,10 +483,17 @@ function ConversationPanel({
             onChange={(e) => setReply(e.target.value)}
             disabled={!mine}
             aria-label="Resposta ao funcionário"
-            placeholder={mine ? 'Responder ao funcionário…' : 'Assuma a conversa para responder'}
+            maxLength={4000}
+            placeholder={
+              mine
+                ? 'Responder ao funcionário…'
+                : closed
+                  ? 'Atendimento encerrado'
+                  : 'Assuma a conversa para responder'
+            }
             className="h-10"
           />
-          <Button type="submit" size="lg" disabled={!mine || !reply.trim()}>
+          <Button type="submit" size="lg" disabled={!mine || !reply.trim() || busy}>
             <SendHorizontal /> Enviar
           </Button>
         </div>

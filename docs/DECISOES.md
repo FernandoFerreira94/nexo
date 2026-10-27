@@ -203,7 +203,7 @@ Nenhum BLOCKER de produto. As decisões técnicas abertas vão para o S5.
 - **A03 Runtime do agent** — **Vercel AI SDK** (`generateObject` + `streamText` com tools e limite de passos), provider por env. _Alt:_ Mastra (Agent + createTool, **sem** memória/workflows do Mastra, porque a persistência é nossa). _Trade-off:_ AI SDK é a camada que o próprio Mastra usa; menos abstração para explicar e trocar ao vivo. Mastra soma "framework de agents" no currículo, mas duplica estado/memória se usado por inteiro. **DECIDIDO por Fernando em 27/10/2026: AI SDK direto (Q1 resolvida).**
 - **A04 Pipeline de um turno** (ver fluxo abaixo) — 1) guards em código; 2) **interpretar** com saída estruturada (Zod); 3) **regras** decidem (escopo, handoff, prioridade, vencido); 4) **responder** com `streamText` e **tools liberadas por intenção** (máx. 4 passos); 5) trace. _Alt:_ um único loop de agent com todas as tools. _Trade-off:_ 2 chamadas ao LLM por turno, mas cada etapa é testável com mock e o trace sai naturalmente.
 - **A05 Tickets-service** — **Hono** (Web Standards, testa com `app.request()` sem subir porta). _Alt:_ Fastify. _Trade-off:_ Fastify tem mais plugins; Hono é menor e basta.
-- **A06 Persistência** — SQLite + **Drizzle** + `better-sqlite3`; 2 arquivos: `data/app.db` e `data/tickets.db`. _Alt:_ Prisma; ou libsql/Turso. _Trade-off:_ Drizzle é SQL tipado sem engine binária; deploy exige volume (A14).
+- **A06 Persistência** — SQLite + **Drizzle** + cliente **libSQL**; local em 2 arquivos (`data/app.db` e `data/tickets.db`), na Vercel no Turso. _Alt:_ Prisma; Postgres (Neon). _Trade-off:_ mesmo SQL local e em produção, zero infraestrutura local; acesso a dados assíncrono. (Começou com `better-sqlite3`; trocado para publicar na Vercel, que não guarda arquivos.)
 - **A07 Auth** — login com e-mail do seed (qualquer senha), tabela `sessions`, cookie `HttpOnly; SameSite=Lax` com id assinado por HMAC (`node:crypto`, `AUTH_SECRET`). `middleware.ts` protege `/console` por papel. _Alt:_ Auth.js credentials. _Trade-off:_ ~60 linhas nossas vs. uma lib grande para um login fake.
 - **A08 Streaming do chat** — protocolo próprio **NDJSON** de eventos tipados (union Zod em `shared`): `action` · `text-delta` · `card` · `quick-replies` · `trace` · `error` · `done`. _Alt:_ `useChat` + UI Message Stream do AI SDK. _Trade-off:_ ~80 linhas nossas, 100% explicáveis; cards customizados sem aprender o formato do SDK.
 - **A09 Tempo quase real** — polling de 3s no console e no chat quando a conversa não está `with_agent`. _Alt:_ SSE. _Trade-off:_ polling é trivial e suficiente para 2 analistas; SSE fica em "com mais tempo".
@@ -222,7 +222,7 @@ Web/mobile/hybrid: web
 Frontend: Next.js App Router + TS strict + Tailwind + shadcn/ui
 Backend: Next Route Handlers (BFF) + tickets-service Hono separado
 Database: SQLite ×2 (app, tickets)
-ORM/query layer: Drizzle + better-sqlite3
+ORM/query layer: Drizzle + libSQL (arquivo local / Turso)
 Auth/AuthZ: sessão em DB + cookie HMAC; papel employee|analyst; requesterId só da sessão
 Tenancy: N/A (single-tenant)
 Storage / Email / Payments / PDF / Queue / Cache: N/A
@@ -370,3 +370,23 @@ nexo-assist/
 - **Login sem senha**, escolhendo perfil e pessoa (pedido para facilitar o teste). A sessão continua sendo o cookie assinado.
 - **Splash** uma vez por sessão do navegador, só visual (não bloqueia cliques) e escondida por um script antes da pintura quando já foi vista.
 - Sem tema escuro nesta entrega.
+
+## Publicação na Vercel (27/10)
+
+- **D-V1 Banco no Turso.** A Vercel não guarda arquivos e roda várias cópias do servidor: SQLite em arquivo perderia dados e o analista poderia não ver o chat. O Turso é o mesmo SQLite hospedado, então schema e consultas não mudaram. _Alt:_ Neon (Postgres), mais reescrita; SQLite em `/tmp`, perde dados.
+- **D-V2 Serviço de chamados embutido.** `TICKETS_SERVICE_URL=embedded` roda o Hono dentro do app e o cliente chama `app.request` em vez da rede. O contrato HTTP, o token, o retry e o circuit breaker continuam iguais.
+- **D-V3 Demo pública.** Teto diário global de respostas (`LLM_DAILY_TURN_LIMIT`, contado nos traces), limpeza de conversas paradas (`DEMO_RESET_HOURS`) e semente de chamados refeita por dia.
+
+## Review antes da entrega (27/10)
+
+Corrigido:
+
+- Assumir conversa: dois analistas ao mesmo tempo podiam ficar com a mesma conversa. Agora é um update condicional; o segundo recebe 409.
+- Contador de mensagens lido e gravado em dois passos: agora soma no banco.
+- Conversa encerrada sumia da tela do funcionário (abria uma conversa vazia sem aviso). Agora ele vê "Atendimento encerrado" e a próxima mensagem abre uma conversa nova.
+- Falha do modelo mostrava o aviso "sistema de chamados instável", que era falso. Agora só a confiança cai.
+- O modelo podia terminar sem texto e salvar uma resposta vazia. Agora há um texto padrão (`EMPTY_REPLY_FALLBACK`).
+- Erro no meio do streaming sumia ao final da resposta; sessão expirada no chat não levava ao login.
+- Console: a resposta digitada era apagada mesmo quando o envio falhava, e o texto ia junto ao trocar de conversa. Botões sem estado de carregando. No celular, a fila e a conversa agora aparecem uma de cada vez.
+- `db:reset` não apagava os traces. Polling pausa com a aba em segundo plano. Cabeçalhos de segurança (`nosniff`, `frame-ancestors`, `Referrer-Policy`).
+- Leitores de tela: a conversa é um `role="log"`, então mensagens novas (inclusive do analista) são anunciadas.

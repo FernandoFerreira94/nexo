@@ -40,6 +40,17 @@ test('funcionário abre chamado com confirmação e analista assume a conversa',
   await expect(ana.getByText('Oi Ana, sou o Marcos. Já estou vendo.')).toBeVisible({
     timeout: 10_000,
   })
+
+  // Encerrar: a Ana vê o aviso e pode começar uma conversa nova.
+  await marcos.getByRole('button', { name: 'Encerrar' }).click()
+  await expect(ana.getByText('O analista encerrou este atendimento', { exact: false })).toBeVisible(
+    {
+      timeout: 10_000,
+    },
+  )
+  await ana.getByLabel('Mensagem').fill('Oi')
+  await ana.getByRole('button', { name: 'Enviar' }).click()
+  await expect(ana.getByText('Aguardando analista')).toHaveCount(0)
 })
 
 test('funcionário não acessa o console', async ({ page }) => {

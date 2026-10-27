@@ -97,6 +97,7 @@ export async function* runTurn(input: TurnInput): AsyncGenerator<StreamEvent, Tu
   })
 
   let text = ''
+  let llmFailed = false
   let handoff: TurnResult['handoff'] = null
 
   if (handoffDecision) {
@@ -164,6 +165,15 @@ export async function* runTurn(input: TurnInput): AsyncGenerator<StreamEvent, Tu
       const usage = await result.totalUsage
       tokens.input += usage.inputTokens ?? 0
       tokens.output += usage.outputTokens ?? 0
+      // O modelo pode gastar todos os passos em tools e não escrever nada: nunca salvar resposta vazia.
+      if (!text.trim()) {
+        sink.rulesApplied.push('EMPTY_REPLY_FALLBACK')
+        text =
+          sink.cards.length > 0
+            ? 'Veja o que encontrei:'
+            : 'Não consegui concluir a resposta agora. Pode reformular ou falar com um analista.'
+        yield { type: 'text-delta', text }
+      }
     } catch {
       yield* drain(sink)
       sink.rulesApplied.push('LLM_STREAM_FAILED')
@@ -171,7 +181,7 @@ export async function* runTurn(input: TurnInput): AsyncGenerator<StreamEvent, Tu
         'Tive um problema para responder agora. Pode tentar de novo ou falar com um analista.'
       text += text ? `\n\n${fallback}` : fallback
       yield { type: 'text-delta', text: fallback }
-      sink.toolFailed = true
+      llmFailed = true
     }
   }
 
@@ -199,7 +209,7 @@ export async function* runTurn(input: TurnInput): AsyncGenerator<StreamEvent, Tu
     modelConfidence: understanding.confidence,
     modelReason: understanding.confidenceReason,
     intent: understanding.intent,
-    toolFailed: sink.toolFailed,
+    toolFailed: sink.toolFailed || llmFailed,
     weakArticleMatch: understanding.intent === 'question' && sink.weakArticleMatch,
   })
   sink.rulesApplied.push(...confidence.capsApplied)

@@ -26,4 +26,6 @@ export function toLibsqlUrl(url: string): string {
   return `file:${url}`
 }
 
-export const DEFAULT_DB_PATH = fileURLToPath(new URL('../../../../data/tickets.db', import.meta.url))
+export const DEFAULT_DB_PATH = fileURLToPath(
+  new URL('../../../../data/tickets.db', import.meta.url),
+)
