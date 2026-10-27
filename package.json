@@ -16,10 +16,12 @@
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier --write .",
-    "eval": "pnpm --filter @nexo/evals eval"
+    "eval": "pnpm --filter @nexo/evals eval",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.63.0",
     "@types/node": "^22.20.5",
     "eslint": "^10.13.0",
     "globals": "^17.13.0",
