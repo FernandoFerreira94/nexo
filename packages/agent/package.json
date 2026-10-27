@@ -7,10 +7,10 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json",
-    "eval": "tsx --env-file-if-exists=../../.env ../../evals/run.ts"
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@ai-sdk/provider": "4.0.34",
     "@nexo/shared": "workspace:*",
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "ai": "^7.0.154",

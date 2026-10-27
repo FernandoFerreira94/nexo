@@ -331,3 +331,13 @@ nexo-assist/
 - **A15 Jev (TypeSafe):** interface `DecisionEngine` com implementação por LLM; adaptador Jev opcional (`DECISION_PROVIDER=jev`) depois do núcleo.
 - **Regras puras no `packages/shared/src/rules`:** SLA e reabertura são usadas pelo serviço de chamados **e** pelo agent; por isso ficam no pacote compartilhado, não dentro do agent.
 - **TypeScript 6.0:** o 7.0 (versão nativa) ainda não é suportado pelo typescript-eslint.
+
+## Decisões da implementação do agent (27/10/2026, noite)
+
+- **Entender antes de responder.** Cada turno faz uma chamada curta de classificação (intenção, confiança, crítico) antes de responder. As regras de transferência rodam em cima disso, sem depender do texto da resposta.
+- **Tools por intenção.** O modelo só recebe as tools da intenção detectada (ex.: status recebe só `listMyTickets` e `getTicket`). Menos opções, menos erro e menos tokens.
+- **Baixa confiança depois da resposta oferece analista, não transfere.** Se a confiança cai durante a resposta (ex.: o sistema de chamados falhou), a resposta já foi dada; o agent mostra o botão "Falar com um analista". A transferência automática por baixa confiança vale só antes de responder (D06).
+- **Chamado parecido é checado antes do artigo.** Se a pessoa já tem chamado aberto sobre o mesmo assunto, o agent pergunta se é o mesmo antes de sugerir artigo ou abrir outro.
+- **Resumo de transferência por template, sem LLM.** É instantâneo, não custa nada e não inventa fatos.
+- **Modo mock.** Sem chave, um modelo roteirizado (`packages/agent/src/llm/mock-model.ts`) e uma decisão por palavras-chave permitem rodar a aplicação, os testes e os evals de graça. Com o modelo real, essas heurísticas não entram no caminho.
+- **Jev via OpenRouter.** O provider da OpenRouter implementa a versão anterior da spec de decisão do AI SDK; o tipo é ajustado num único ponto (`understanding.ts`), com o motivo comentado.

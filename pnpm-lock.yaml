@@ -61,8 +61,27 @@ importers:
         specifier: ^4.23.15
         version: 4.23.15
 
+  evals:
+    dependencies:
+      '@nexo/agent':
+        specifier: workspace:*
+        version: link:../packages/agent
+      '@nexo/shared':
+        specifier: workspace:*
+        version: link:../packages/shared
+      '@nexo/tickets-service':
+        specifier: workspace:*
+        version: link:../apps/tickets-service
+    devDependencies:
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+
   packages/agent:
     dependencies:
+      '@ai-sdk/provider':
+        specifier: 4.0.34
+        version: 4.0.34
       '@nexo/shared':
         specifier: workspace:*
         version: link:../shared

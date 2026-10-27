@@ -16,7 +16,7 @@
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier --write .",
-    "eval": "pnpm --filter @nexo/agent eval"
+    "eval": "pnpm --filter @nexo/evals eval"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

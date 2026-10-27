@@ -24,7 +24,7 @@ const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
 function clientWith(responses: Array<() => Response>, breaker = new CircuitBreaker(5, 10_000)) {
-  const fetchFn = vi.fn(async () => {
+  const fetchFn = vi.fn(async (_url: string, _init?: RequestInit) => {
     const next = responses.shift()
     if (!next) throw new Error('sem resposta')
     return next()
@@ -80,7 +80,7 @@ describe('tickets-client', () => {
       },
       'draft-1:1',
     )
-    const init = fetchFn.mock.calls[0]?.[1] as RequestInit
+    const init = fetchFn.mock.calls[0]?.[1] ?? {}
     expect((init.headers as Record<string, string>)['idempotency-key']).toBe('draft-1:1')
   })
 
