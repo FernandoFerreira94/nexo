@@ -11,3 +11,5 @@ data/*.db-*
 playwright-report/
 test-results/
 .DS_Store
+next-env.d.ts
+apps/web/AGENTS.md
