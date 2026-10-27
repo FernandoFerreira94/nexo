@@ -7,6 +7,7 @@ import {
   type Draft,
   type QuickReply,
   type StreamEvent,
+  type TicketSummary,
 } from '@nexo/shared'
 import {
   BookOpen,
@@ -38,7 +39,7 @@ import { formatDateTime, formatTime } from '@/lib/format'
 import { readEvents } from '@/lib/stream'
 import type { ChatMessage, ConversationState } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { MessageCard } from './cards'
+import { MessageCard, type DraftEdit } from './cards'
 import { ActionLine, TracePanel } from './trace-panel'
 
 type ConversationResponse = {
@@ -208,6 +209,25 @@ export function ChatView({ user }: { user: { name: string; department: string } 
     await reload()
   }
 
+  const onDraftEdit = async (draft: Draft, edit: DraftEdit) => {
+    setError(null)
+    try {
+      await api(`/api/drafts/${draft.id}`, {
+        method: 'PATCH',
+        body: { version: draft.version, ...edit },
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não consegui salvar a edição.')
+    }
+    await reload()
+  }
+
+  // Tela 3: tocar num chamado da lista pergunta por ele, sem precisar digitar o número.
+  const onTicketPick = (ticket: TicketSummary) => {
+    if (status !== 'with_agent' || live) return
+    send(`Qual o status do ${ticket.id}?`)
+  }
+
   const messages = data?.messages ?? []
   const pendingDraft = data?.pendingDraft ?? null
   const lastAgentIndex = messages.findLastIndex((m) => m.role === 'agent')
@@ -267,6 +287,8 @@ export function ChatView({ user }: { user: { name: string; department: string } 
               photo={photoFor(message)}
               pendingDraft={pendingDraft}
               onDraftAction={onDraftAction}
+              onDraftEdit={onDraftEdit}
+              onTicketPick={status === 'with_agent' && !live ? onTicketPick : undefined}
               onQuickReply={
                 index === lastAgentIndex && status === 'with_agent' && !live
                   ? onQuickReply
@@ -396,9 +418,12 @@ export function ChatView({ user }: { user: { name: string; department: string } 
               </Button>
             </div>
           </div>
-          <p className="mt-2 text-center text-caption text-muted-foreground">
-            O assistente só abre chamados com a sua confirmação.
-          </p>
+          <div className="mt-2 flex items-center justify-center gap-2 text-caption text-muted-foreground">
+            <span>O assistente só abre chamados com a sua confirmação.</span>
+            {data && data.conversation.messageCount > 0 && (
+              <MessageCounter conversation={data.conversation} />
+            )}
+          </div>
           {error && (
             <p
               role="alert"
@@ -508,6 +533,24 @@ function ChatHeader({
   )
 }
 
+/** Contador do limite de mensagens: discreto no começo, em destaque perto do fim. */
+function MessageCounter({ conversation }: { conversation: ConversationState }) {
+  const { messageCount: count, messageLimit: limit, messageWarnAt: warnAt } = conversation
+  const near = count >= warnAt
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-full px-2 py-0.5 font-medium tabular-nums',
+        near ? 'bg-warning/15 text-warning' : 'bg-muted',
+      )}
+      title="Limite de mensagens por conversa. Ao chegar nele, um analista assume."
+    >
+      {count}/{limit}
+      <span className="sr-only"> mensagens usadas nesta conversa</span>
+    </span>
+  )
+}
+
 function LoadingState() {
   return (
     <div className="grid gap-4">
@@ -550,12 +593,16 @@ function MessageItem({
   photo,
   pendingDraft,
   onDraftAction,
+  onDraftEdit,
+  onTicketPick,
   onQuickReply,
 }: {
   message: ChatMessage
   photo?: LocalPhoto | undefined
   pendingDraft: Draft | null
   onDraftAction: (draft: Draft, action: 'confirm' | 'cancel') => Promise<void>
+  onDraftEdit: (draft: Draft, edit: DraftEdit) => Promise<void>
+  onTicketPick?: ((ticket: TicketSummary) => void) | undefined
   onQuickReply?: (reply: QuickReply) => void
 }) {
   if (message.role === 'system') {
@@ -581,7 +628,13 @@ function MessageItem({
           pendingDraft?.id === card.draft.id &&
           pendingDraft.version === card.draft.version
         return (
-          <MessageCard key={i} card={card} onDraftAction={actionable ? onDraftAction : undefined} />
+          <MessageCard
+            key={i}
+            card={card}
+            onDraftAction={actionable ? onDraftAction : undefined}
+            onDraftEdit={actionable ? onDraftEdit : undefined}
+            onTicketPick={onTicketPick}
+          />
         )
       })}
       {onQuickReply && message.quickReplies.length > 0 && (

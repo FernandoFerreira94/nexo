@@ -204,7 +204,7 @@ Nenhum BLOCKER de produto. As decisões técnicas abertas vão para o S5.
 - **A04 Pipeline de um turno** (ver fluxo abaixo) — 1) guards em código; 2) **interpretar** com saída estruturada (Zod); 3) **regras** decidem (escopo, handoff, prioridade, vencido); 4) **responder** com `streamText` e **tools liberadas por intenção** (máx. 4 passos); 5) trace. _Alt:_ um único loop de agent com todas as tools. _Trade-off:_ 2 chamadas ao LLM por turno, mas cada etapa é testável com mock e o trace sai naturalmente.
 - **A05 Tickets-service** — **Hono** (Web Standards, testa com `app.request()` sem subir porta). _Alt:_ Fastify. _Trade-off:_ Fastify tem mais plugins; Hono é menor e basta.
 - **A06 Persistência** — SQLite + **Drizzle** + cliente **libSQL**; local em 2 arquivos (`data/app.db` e `data/tickets.db`), na Vercel no Turso. _Alt:_ Prisma; Postgres (Neon). _Trade-off:_ mesmo SQL local e em produção, zero infraestrutura local; acesso a dados assíncrono. (Começou com `better-sqlite3`; trocado para publicar na Vercel, que não guarda arquivos.)
-- **A07 Auth** — login com e-mail do seed (qualquer senha), tabela `sessions`, cookie `HttpOnly; SameSite=Lax` com id assinado por HMAC (`node:crypto`, `AUTH_SECRET`). `middleware.ts` protege `/console` por papel. _Alt:_ Auth.js credentials. _Trade-off:_ ~60 linhas nossas vs. uma lib grande para um login fake.
+- **A07 Auth** — login sem senha (escolhe perfil e pessoa do seed, decisão do Fernando). Sessão _stateless_: cookie `HttpOnly; SameSite=Lax` com `userId` e validade assinados por HMAC (`node:crypto`, `AUTH_SECRET`), sem tabela de sessões. O papel vem do usuário no banco e é checado na página `/console` e em cada rota `/api/console/*`; o `requesterId` sempre sai do cookie, nunca do LLM. _Alt:_ Auth.js credentials. _Trade-off:_ ~60 linhas nossas vs. uma lib grande para um login fake. (Texto corrigido em 27/10: a versão anterior citava tabela `sessions` e `middleware.ts`, que não chegaram a existir.)
 - **A08 Streaming do chat** — protocolo próprio **NDJSON** de eventos tipados (union Zod em `shared`): `action` · `text-delta` · `card` · `quick-replies` · `trace` · `error` · `done`. _Alt:_ `useChat` + UI Message Stream do AI SDK. _Trade-off:_ ~80 linhas nossas, 100% explicáveis; cards customizados sem aprender o formato do SDK.
 - **A09 Tempo quase real** — polling de 3s no console e no chat quando a conversa não está `with_agent`. _Alt:_ SSE. _Trade-off:_ polling é trivial e suficiente para 2 analistas; SSE fica em "com mais tempo".
 - **A10 Busca de artigos** — pontuação por palavras-chave em código (normaliza acento, stopwords, sinônimos mínimos: "vpn"↔"rede remota"). Match forte responde direto do artigo (economiza tokens). _Alt:_ embeddings. _Trade-off:_ 5–10 artigos não justificam vetor.
@@ -390,3 +390,15 @@ Corrigido:
 - Console: a resposta digitada era apagada mesmo quando o envio falhava, e o texto ia junto ao trocar de conversa. Botões sem estado de carregando. No celular, a fila e a conversa agora aparecem uma de cada vez.
 - `db:reset` não apagava os traces. Polling pausa com a aba em segundo plano. Cabeçalhos de segurança (`nosniff`, `frame-ancestors`, `Referrer-Policy`).
 - Leitores de tela: a conversa é um `role="log"`, então mensagens novas (inclusive do analista) são anunciadas.
+
+## Conferência do brief (27/10)
+
+Item por item do brief contra o código. Faltavam e foram feitos:
+
+- Rascunho com **Editar** (além de Confirmar e Cancelar): `editDraft` cria a versão seguinte; a versão antiga deixa de confirmar. Tipo, categoria e prioridade não mudam na edição, porque vêm das regras.
+- **Seleção de chamado**: cada chamado da lista é clicável e pergunta o status dele.
+- **Contador do limite de 30** visível no chat, com destaque a partir do aviso.
+- **Filtro de prioridade** no console. A conversa não tem prioridade própria, então ela é derivada por regra: crítica (motivo crítico), alta (chamado vencido), normal.
+- Testes do schema do trace (`DecisionTrace`, `StreamEvent`).
+
+Fica de fora, com motivo: prints do protótipo em `docs/prototipo/` (o arquivo do Pencil não está acessível daqui; as telas reais estão no README).

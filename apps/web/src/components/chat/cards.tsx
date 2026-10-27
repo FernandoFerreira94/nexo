@@ -8,39 +8,81 @@ import {
   type Draft,
   type TicketSummary,
 } from '@nexo/shared'
-import { BookOpen, Clock, FileText, LoaderCircle, TriangleAlert } from 'lucide-react'
+import {
+  BookOpen,
+  ChevronRight,
+  Clock,
+  FileText,
+  LoaderCircle,
+  Pencil,
+  TriangleAlert,
+} from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
 import { PriorityBadge, StatusBadge } from '@/components/ui/ticket-badges'
 import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+export type DraftEdit = { title?: string; description: string }
+
 export function MessageCard({
   card,
   onDraftAction,
+  onDraftEdit,
+  onTicketPick,
 }: {
   card: MessageCardData
-  onDraftAction?: (draft: Draft, action: 'confirm' | 'cancel') => Promise<void>
+  onDraftAction?: ((draft: Draft, action: 'confirm' | 'cancel') => Promise<void>) | undefined
+  onDraftEdit?: ((draft: Draft, edit: DraftEdit) => Promise<void>) | undefined
+  onTicketPick?: ((ticket: TicketSummary) => void) | undefined
 }) {
-  if (card.type === 'tickets') return <TicketList tickets={card.tickets} />
+  if (card.type === 'tickets') return <TicketList tickets={card.tickets} onPick={onTicketPick} />
   if (card.type === 'article') return <ArticleCard id={card.articleId} title={card.title} />
-  return <DraftCard draft={card.draft} onAction={onDraftAction} />
+  return <DraftCard draft={card.draft} onAction={onDraftAction} onEdit={onDraftEdit} />
 }
 
-export function TicketList({ tickets }: { tickets: TicketSummary[] }) {
+/** Lista de chamados. Com `onPick`, cada chamado vira um botão (Tela 3: escolher entre os abertos). */
+export function TicketList({
+  tickets,
+  onPick,
+}: {
+  tickets: TicketSummary[]
+  onPick?: ((ticket: TicketSummary) => void) | undefined
+}) {
   return (
     <ul className="grid gap-2">
       {tickets.map((t) => (
         <li key={t.id}>
           <Card
+            role={onPick ? 'button' : undefined}
+            tabIndex={onPick ? 0 : undefined}
+            aria-label={onPick ? `Ver detalhes do ${t.id}: ${t.title}` : undefined}
+            onClick={onPick ? () => onPick(t) : undefined}
+            onKeyDown={
+              onPick
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onPick(t)
+                    }
+                  }
+                : undefined
+            }
             className={cn(
-              'gap-0 py-3 shadow-xs transition-shadow hover:shadow-sm',
+              'relative gap-0 py-3 shadow-xs transition-shadow hover:shadow-sm',
               t.overdue && 'border-destructive/40 bg-destructive/[0.03]',
+              onPick &&
+                'cursor-pointer pr-8 outline-none hover:border-primary/40 focus-visible:ring-[3px] focus-visible:ring-ring/50',
             )}
           >
+            {onPick && (
+              <ChevronRight className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            )}
             <div className="flex flex-wrap items-center gap-1.5 px-4">
               <span className="font-mono text-caption font-semibold text-foreground">{t.id}</span>
               <StatusBadge status={t.status} />
@@ -90,12 +132,31 @@ const DRAFT_TITLES: Record<Draft['kind'], string> = {
 function DraftCard({
   draft,
   onAction,
+  onEdit,
 }: {
   draft: Draft
-  onAction?: (draft: Draft, action: 'confirm' | 'cancel') => Promise<void>
+  onAction?: ((draft: Draft, action: 'confirm' | 'cancel') => Promise<void>) | undefined
+  onEdit?: ((draft: Draft, edit: DraftEdit) => Promise<void>) | undefined
 }) {
-  const [busy, setBusy] = useState<'confirm' | 'cancel' | null>(null)
+  const [busy, setBusy] = useState<'confirm' | 'cancel' | 'edit' | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(draft.title)
+  const [description, setDescription] = useState(draft.description)
   const actionable = draft.status === 'pending' && onAction
+
+  async function save() {
+    if (!onEdit) return
+    setBusy('edit')
+    try {
+      await onEdit(draft, {
+        description,
+        ...(draft.kind === 'create' ? { title } : {}),
+      })
+      setEditing(false)
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function run(action: 'confirm' | 'cancel') {
     if (!onAction) return
@@ -144,43 +205,105 @@ function DraftCard({
 
       <Separator />
 
-      <dl className="grid gap-3 px-5 text-body">
-        {draft.kind === 'create' && <Field label="Título">{draft.title}</Field>}
-        <Field label={draft.kind === 'reopen' ? 'Motivo' : 'Descrição'}>{draft.description}</Field>
-        {draft.kind === 'create' && (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              {draft.type && <Field label="Tipo">{TICKET_TYPE_LABELS[draft.type]}</Field>}
-              {draft.category && <Field label="Categoria">{CATEGORY_LABELS[draft.category]}</Field>}
-              {draft.affected && <Field label="Afetados">{AFFECTED_LABELS[draft.affected]}</Field>}
-              {draft.priority && (
-                <Field label="Prioridade">
-                  <PriorityBadge priority={draft.priority} />
-                </Field>
+      {editing ? (
+        <form
+          className="grid gap-3 px-5"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void save()
+          }}
+        >
+          {draft.kind === 'create' && (
+            <label className="grid gap-1.5">
+              <span className="text-overline text-muted-foreground">Título</span>
+              <Input value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />
+            </label>
+          )}
+          <label className="grid gap-1.5">
+            <span className="text-overline text-muted-foreground">
+              {draft.kind === 'reopen' ? 'Motivo' : 'Descrição'}
+            </span>
+            <Textarea
+              value={description}
+              rows={4}
+              maxLength={2000}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </label>
+          <p className="text-caption text-muted-foreground">
+            Tipo, categoria e prioridade seguem as regras do service desk e não mudam aqui.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="submit"
+              disabled={busy !== null || description.trim().length < 3 || title.trim().length < 3}
+            >
+              {busy === 'edit' && <LoaderCircle className="animate-spin" />}
+              Salvar edição
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setEditing(false)
+                setTitle(draft.title)
+                setDescription(draft.description)
+              }}
+            >
+              Voltar
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <dl className="grid gap-3 px-5 text-body">
+          {draft.kind === 'create' && <Field label="Título">{draft.title}</Field>}
+          <Field label={draft.kind === 'reopen' ? 'Motivo' : 'Descrição'}>
+            {draft.description}
+          </Field>
+          {draft.kind === 'create' && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                {draft.type && <Field label="Tipo">{TICKET_TYPE_LABELS[draft.type]}</Field>}
+                {draft.category && (
+                  <Field label="Categoria">{CATEGORY_LABELS[draft.category]}</Field>
+                )}
+                {draft.affected && (
+                  <Field label="Afetados">{AFFECTED_LABELS[draft.affected]}</Field>
+                )}
+                {draft.priority && (
+                  <Field label="Prioridade">
+                    <PriorityBadge priority={draft.priority} />
+                  </Field>
+                )}
+              </div>
+              {draft.priorityReason && (
+                <p className="flex gap-2 rounded-md bg-muted p-3 text-caption text-muted-foreground">
+                  <Clock className="mt-px size-3.5 shrink-0" />
+                  <span>
+                    {draft.priorityReason}
+                    {draft.slaLabel && ` Prazo: ${draft.slaLabel}`}
+                    {draft.dueAtPreview && ` (até ${formatDateTime(draft.dueAtPreview)}).`}
+                  </span>
+                </p>
               )}
-            </div>
-            {draft.priorityReason && (
-              <p className="flex gap-2 rounded-md bg-muted p-3 text-caption text-muted-foreground">
-                <Clock className="mt-px size-3.5 shrink-0" />
-                <span>
-                  {draft.priorityReason}
-                  {draft.slaLabel && ` Prazo: ${draft.slaLabel}`}
-                  {draft.dueAtPreview && ` (até ${formatDateTime(draft.dueAtPreview)}).`}
-                </span>
-              </p>
-            )}
-          </>
-        )}
-      </dl>
+            </>
+          )}
+        </dl>
+      )}
 
-      {actionable && (
-        <div className="flex gap-2 px-5">
+      {actionable && !editing && (
+        <div className="flex flex-wrap gap-2 px-5">
           <Button onClick={() => run('confirm')} disabled={busy !== null}>
             {busy === 'confirm' && <LoaderCircle className="animate-spin" />}
             Confirmar
           </Button>
-          <Button variant="outline" onClick={() => run('cancel')} disabled={busy !== null}>
-            Descartar
+          {onEdit && (
+            <Button variant="outline" onClick={() => setEditing(true)} disabled={busy !== null}>
+              <Pencil /> Editar
+            </Button>
+          )}
+          <Button variant="ghost" onClick={() => run('cancel')} disabled={busy !== null}>
+            Cancelar
           </Button>
         </div>
       )}

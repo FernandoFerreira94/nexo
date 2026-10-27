@@ -65,6 +65,25 @@ const REASON_VARIANT: Record<HandoffReason, BadgeVariant> = {
 }
 
 type StatusFilter = 'all' | 'waiting_analyst' | 'with_analyst'
+
+/**
+ * Prioridade da conversa na fila, derivada por regra: crítico (incidente que trava o trabalho)
+ * > alta (tem chamado vencido) > normal. Novo filtro no console: mexa aqui.
+ */
+type QueuePriority = 'critical' | 'high' | 'normal'
+const QUEUE_PRIORITY_LABELS: Record<QueuePriority, string> = {
+  critical: 'Crítica',
+  high: 'Alta (vencido)',
+  normal: 'Normal',
+}
+function queuePriority(item: {
+  handoffReason: HandoffReason | null
+  overdueTicketIds: string[]
+}): QueuePriority {
+  if (item.handoffReason === 'critical') return 'critical'
+  if (item.handoffReason === 'overdue' || item.overdueTicketIds.length > 0) return 'high'
+  return 'normal'
+}
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'Todas' },
   { value: 'waiting_analyst', label: 'Na fila' },
@@ -79,6 +98,7 @@ export function ConsoleView({ analyst }: { analyst: Analyst }) {
   const [detail, setDetail] = useState<DetailResponse | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [reasonFilter, setReasonFilter] = useState<HandoffReason | 'all'>('all')
+  const [priorityFilter, setPriorityFilter] = useState<QueuePriority | 'all'>('all')
   const [error, setError] = useState<string | null>(null)
 
   const loadQueue = useCallback(
@@ -118,7 +138,8 @@ export function ConsoleView({ analyst }: { analyst: Analyst }) {
   const items = all.filter(
     (item) =>
       (statusFilter === 'all' || item.status === statusFilter) &&
-      (reasonFilter === 'all' || item.handoffReason === reasonFilter),
+      (reasonFilter === 'all' || item.handoffReason === reasonFilter) &&
+      (priorityFilter === 'all' || queuePriority(item) === priorityFilter),
   )
   const serviceDown = queue?.ticketsService === 'open'
 
@@ -171,26 +192,48 @@ export function ConsoleView({ analyst }: { analyst: Analyst }) {
               </button>
             ))}
           </div>
-          <Select
-            value={reasonFilter}
-            onValueChange={(v) => setReasonFilter(v as HandoffReason | 'all')}
-          >
-            <SelectTrigger
-              size="sm"
-              aria-label="Filtrar por motivo"
-              className="w-full border-sidebar-border bg-sidebar-accent text-sidebar-foreground"
+          <div className="grid grid-cols-2 gap-2">
+            <Select
+              value={priorityFilter}
+              onValueChange={(v) => setPriorityFilter(v as QueuePriority | 'all')}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os motivos</SelectItem>
-              {HANDOFF_REASONS.map((r) => (
-                <SelectItem key={r} value={r}>
-                  {HANDOFF_REASON_LABELS[r]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger
+                size="sm"
+                aria-label="Filtrar por prioridade"
+                className="w-full border-sidebar-border bg-sidebar-accent text-sidebar-foreground"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toda prioridade</SelectItem>
+                {(Object.keys(QUEUE_PRIORITY_LABELS) as QueuePriority[]).map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {QUEUE_PRIORITY_LABELS[p]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={reasonFilter}
+              onValueChange={(v) => setReasonFilter(v as HandoffReason | 'all')}
+            >
+              <SelectTrigger
+                size="sm"
+                aria-label="Filtrar por motivo"
+                className="w-full border-sidebar-border bg-sidebar-accent text-sidebar-foreground"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todo motivo</SelectItem>
+                {HANDOFF_REASONS.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {HANDOFF_REASON_LABELS[r]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <ScrollArea className="mt-3 min-h-0 flex-1">

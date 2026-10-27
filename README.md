@@ -10,10 +10,10 @@ e como **Marcos Alves** (analista) em outra para ver o atendimento dos dois lado
 ### Roteiro de 3 minutos
 
 1. Como Ana: _"Como está o meu chamado?"_ mostra os chamados e oferece analista para o INC-20311, que está vencido.
-2. _"A VPN dá erro 809 e não consigo trabalhar. Uso Windows 11."_ gera um rascunho com prioridade e prazo calculados. Nada é gravado até clicar em **Confirmar**.
+2. _"A VPN dá erro 809 e não consigo trabalhar. Uso Windows 11."_ gera um rascunho com prioridade e prazo calculados. Dá para **Editar** título e descrição; nada é gravado até clicar em **Confirmar**. Clicar num chamado da lista pergunta o status dele.
 3. Abra **Como decidi** em qualquer resposta: intenção, ações, confiança, regras aplicadas e custo.
-4. _"Quero falar com um analista"_ coloca a conversa na fila. Como Marcos, **Assumir**, responder e **Encerrar**.
-5. No console, **Simular pedidos** enche a fila com casos de exemplo, e **Simular queda** derruba o sistema de chamados por 20 s: o assistente avisa, tenta de novo e não perde nada.
+4. _"Quero falar com um analista"_ coloca a conversa na fila (o contador do limite de 30 mensagens fica no rodapé do chat). Como Marcos, **Assumir**, responder e **Encerrar**.
+5. No console, **Simular pedidos** enche a fila com casos de exemplo (filtre por status, prioridade e motivo), e **Simular queda** derruba o sistema de chamados por 20 s: o assistente avisa, tenta de novo e não perde nada.
 
 ## Como rodar
 
@@ -123,7 +123,7 @@ corpo da requisição. O serviço de chamados responde 404 para chamado de outra
 - **E2E** do fluxo principal com Playwright.
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test   # 94 testes
+pnpm typecheck && pnpm lint && pnpm test   # 101 testes
 pnpm test:e2e                              # Playwright (sobe tudo sozinho)
 pnpm eval                                  # cenários com o modelo do .env
 ```

@@ -8,4 +8,7 @@ export type ConversationState = {
   id: string
   status: ConversationStatus
   handoffReason: HandoffReason | null
+  messageCount: number
+  messageLimit: number
+  messageWarnAt: number
 }

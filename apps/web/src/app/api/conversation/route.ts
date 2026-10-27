@@ -6,13 +6,17 @@ import { getRuntime } from '@/server/runtime'
 export async function GET() {
   return handle(async () => {
     const user = await requireUser('employee')
-    const { db } = await getRuntime()
+    const { db, config } = await getRuntime()
     const conversation = await getLatestConversation(db, user.id)
     return json({
       conversation: {
         id: conversation.id,
         status: conversation.status,
         handoffReason: conversation.handoffReason,
+        // Limite de mensagens por conversa (Anexo A): a tela mostra o contador.
+        messageCount: conversation.employeeMessageCount,
+        messageLimit: config.messageLimit,
+        messageWarnAt: config.messageWarnAt,
       },
       messages: await listMessages(db, conversation.id),
       pendingDraft: await getPendingDraft(db, conversation.id),

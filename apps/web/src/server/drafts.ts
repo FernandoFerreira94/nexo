@@ -5,6 +5,7 @@ import {
   ConflictError,
   finishDraft,
   getDraftForConfirmation,
+  saveDraft,
   type Message,
 } from './conversations'
 import type { Runtime } from './runtime'
@@ -40,6 +41,34 @@ export async function cancelDraft(rt: Runtime, userId: string, draftId: string, 
     conversationId: conversation.id,
     role: 'agent',
     content: 'Tudo bem, descartei o rascunho. Se precisar, é só me chamar.',
+  })
+}
+
+/**
+ * Botão Editar do rascunho: o funcionário corrige título e descrição antes de confirmar.
+ * Vira uma versão nova (o card antigo deixa de ser confirmável). Tipo, categoria e
+ * prioridade não se editam aqui: saem das regras, a partir do que ele contou.
+ */
+export async function editDraft(
+  rt: Runtime,
+  userId: string,
+  draftId: string,
+  version: number,
+  changes: { title?: string | undefined; description: string },
+): Promise<Message> {
+  const { draft, conversation } = await getDraftForConfirmation(rt.db, draftId, userId, version)
+  const edited: Draft = {
+    ...draft,
+    title: draft.kind === 'create' && changes.title ? changes.title : draft.title,
+    description: changes.description,
+    version: draft.version + 1,
+  }
+  await saveDraft(rt.db, conversation.id, edited)
+  return addMessage(rt.db, {
+    conversationId: conversation.id,
+    role: 'agent',
+    content: 'Atualizei o rascunho com a sua edição. Confira e confirme quando estiver certo.',
+    cards: [{ type: 'draft', draft: edited }],
   })
 }
 

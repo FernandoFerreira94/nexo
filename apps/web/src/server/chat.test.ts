@@ -24,7 +24,7 @@ import {
 } from './conversations'
 import { simulateQueue } from './demo'
 import { openAppDb } from './db/client'
-import { cancelDraft, confirmDraft } from './drafts'
+import { cancelDraft, confirmDraft, editDraft } from './drafts'
 import type { Runtime } from './runtime'
 
 const ana = { id: 'u_ana', name: 'Ana Souza' }
@@ -81,6 +81,32 @@ describe('fluxo do chat', () => {
     expect(message.content).toMatch(/INC-\d+/)
     await expect(confirmDraft(rt, ana.id, draft.id, draft.version)).rejects.toThrow()
     expect(await rt.tickets.listTickets(ana.id)).toHaveLength(before.length + 1)
+  })
+
+  it('editar cria uma versão nova; a antiga não confirma mais e o chamado sai com a edição', async () => {
+    const { rt } = await setup()
+    await collect(
+      handleEmployeeMessage(rt, ana, 'A VPN dá erro 809 e não consigo trabalhar. Uso Windows 11.'),
+    )
+    const { draft } = await findDraft(rt)
+    await expect(
+      editDraft(rt, 'u_bruno', draft.id, draft.version, { description: 'outra coisa' }),
+    ).rejects.toBeInstanceOf(NotFoundError)
+
+    const message = await editDraft(rt, ana.id, draft.id, draft.version, {
+      title: 'VPN com erro 809',
+      description: 'Erro 809 ao conectar a VPN no Windows 11 desde hoje cedo.',
+    })
+    const card = message.cards[0]
+    if (card?.type !== 'draft') throw new Error('sem rascunho')
+    expect(card.draft.version).toBe(draft.version + 1)
+    expect(card.draft.priority).toBe(draft.priority)
+
+    await expect(confirmDraft(rt, ana.id, draft.id, draft.version)).rejects.toThrow()
+    const confirmed = await confirmDraft(rt, ana.id, draft.id, card.draft.version)
+    const id = /INC-\d+/.exec(confirmed.content)?.[0]
+    const created = (await rt.tickets.listTickets(ana.id)).find((t) => t.id === id)
+    expect(created?.title).toBe('VPN com erro 809')
   })
 
   it('outro funcionário não confirma nem cancela o rascunho da Ana', async () => {
