@@ -13,7 +13,7 @@ import { ActionLine, TracePanel } from '@/components/chat/trace-panel'
 import { Badge, type Tone } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { api, logout } from '@/lib/api'
-import { formatTime, formatWait } from '@/lib/format'
+import { formatTime, formatUsd, formatWait } from '@/lib/format'
 import type { ChatMessage } from '@/lib/types'
 import type { Conversation } from '@/server/conversations'
 
@@ -222,7 +222,8 @@ function ConversationPanel({
         <div>
           <p className="text-sm font-semibold">{detail.employee?.name}</p>
           <p className="text-xs text-ink-faint">
-            {CONVERSATION_STATUS_LABELS[conversation.status]}
+            {CONVERSATION_STATUS_LABELS[conversation.status]} · custo do assistente{' '}
+            {formatUsd(detail.messages.reduce((sum, m) => sum + (m.trace?.costUsd ?? 0), 0))}
           </p>
         </div>
         <div className="flex gap-2">

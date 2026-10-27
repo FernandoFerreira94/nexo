@@ -341,3 +341,24 @@ nexo-assist/
 - **Resumo de transferência por template, sem LLM.** É instantâneo, não custa nada e não inventa fatos.
 - **Modo mock.** Sem chave, um modelo roteirizado (`packages/agent/src/llm/mock-model.ts`) e uma decisão por palavras-chave permitem rodar a aplicação, os testes e os evals de graça. Com o modelo real, essas heurísticas não entram no caminho.
 - **Jev via OpenRouter.** O provider da OpenRouter implementa a versão anterior da spec de decisão do AI SDK; o tipo é ajustado num único ponto (`understanding.ts`), com o motivo comentado.
+
+## Decisões do app web
+
+- **Trace em tabela própria (`decision_traces`)**, ligado à mensagem do agent por `trace_id`.
+- **Sessão sem tabela.** O cookie assinado com HMAC carrega o `userId` e a validade (8 h). O contador de mensagens fica na conversa (`employee_message_count`), que é onde o limite de 30 se aplica.
+- **Conversa ativa.** Ao entrar, o funcionário retoma a última conversa não encerrada (D13).
+- **Console por polling de 3 s**, sem WebSocket.
+- **Filtros do console** por status e motivo. Conversa não tem prioridade própria; "crítico" e "vencido" aparecem como motivo e selo.
+
+## Checklist de privacidade e segurança
+
+- [x] `requesterId` sempre da sessão; as tools fecham sobre ele e o modelo não o vê como parâmetro.
+- [x] Serviço de chamados filtra por dono e responde 404 para chamado alheio (testado).
+- [x] Conversa e rascunho de outra pessoa respondem 404 (testado).
+- [x] Console e API da fila exigem papel analista (testado no E2E com 403).
+- [x] Escrita no legado só pelo Confirmar, com Idempotency-Key (testado).
+- [x] Cenário de eval garante que cartões e texto não mostram chamados de outra pessoa.
+- [x] Entrada validada com Zod em todas as rotas; erros sem stack para o usuário.
+- [x] Logs sem conteúdo de mensagens nem valores do `.env`.
+- [x] Rate limit por usuário no chat (20 por minuto).
+- [x] Segredos só no `.env` (fora do git); `.env.example` com valores fictícios.
