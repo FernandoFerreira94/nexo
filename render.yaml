@@ -1,0 +1,22 @@
+# Deploy de demonstração no Render (Blueprint). Roda em LLM_PROVIDER=mock, sem custo de LLM.
+services:
+  - type: web
+    name: nexo-assist
+    runtime: docker
+    plan: free
+    healthCheckPath: /login
+    envVars:
+      - key: LLM_PROVIDER
+        value: mock
+      - key: DECISION_PROVIDER
+        value: llm
+      - key: TICKETS_SERVICE_URL
+        value: http://localhost:4010
+      - key: TICKETS_SERVICE_PORT
+        value: '4010'
+      - key: TICKETS_FAILURE_RATE
+        value: '0.1'
+      - key: TICKETS_SERVICE_TOKEN
+        generateValue: true
+      - key: AUTH_SECRET
+        generateValue: true

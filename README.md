@@ -147,8 +147,12 @@ nos evals antes de adotar.
 
 ## Deploy
 
-Ainda não publicado. Plano: web na Vercel e serviço de chamados no Railway (ou tudo no Railway com
-volume para o SQLite), chaves só em variáveis da plataforma e teto de uso por usuário.
+Demo em um serviço só (`Dockerfile` + `render.yaml`): o serviço de chamados roda por dentro, na porta 4010,
+e o app web na porta pública. Roda em `LLM_PROVIDER=mock`, sem custo de LLM; `AUTH_SECRET` e o token do
+serviço são gerados pela plataforma. Os bancos SQLite são recriados a cada deploy com os dados de exemplo.
+
+No Render: **New > Blueprint**, escolher este repositório e confirmar. Para usar o modelo real, definir
+`LLM_PROVIDER=openrouter`, `LLM_API_KEY` e `LLM_MODEL` nas variáveis do serviço (nunca no código).
 
 ## Documentação
 
