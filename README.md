@@ -18,8 +18,9 @@ pnpm dev
 - App (chat e console): http://localhost:3000
 - Serviço de chamados (o "legado" simulado): http://localhost:4010
 
-Na tela de login há acesso rápido aos usuários do seed (qualquer senha). Ana Souza tem a
-história mais rica (chamado vencido, resolvido há 4 e há 12 dias); Marcos e Patrícia são analistas.
+No login de demonstração você escolhe o perfil (Funcionário ou Analista) e a pessoa, e entra com um
+clique, sem senha. Ana Souza tem a história mais rica (chamado vencido, resolvido há 4 e há 12 dias);
+Marcos e Patrícia são analistas.
 
 **Sem chave de API** o projeto roda em `LLM_PROVIDER=mock`: um modelo roteirizado que permite
 usar tudo e rodar os testes de graça. Para o modelo real, no `.env`:
@@ -30,6 +31,16 @@ LLM_API_KEY=sua-chave-da-openrouter
 LLM_MODEL=anthropic/claude-haiku-5.5   # trocar de modelo é só mudar esta linha
 DECISION_PROVIDER=llm                   # ou jev, para usar o modelo de decisão da TypeSafe
 ```
+
+## Interface e sistema de design
+
+- **shadcn/ui** em todos os componentes (`apps/web/src/components/ui`), sobre Radix e Tailwind v4.
+- **Tokens num lugar só:** `apps/web/src/app/globals.css` define cores (OKLCH), raios e a escala tipográfica
+  com nomes de uso (`text-display`, `text-title`, `text-heading`, `text-body`, `text-caption`, `text-overline`).
+- **Tipografia:** Geist e Geist Mono (números de chamado e custos).
+- **Marca:** logo em SVG (`components/brand/logo.tsx`): um "N" que liga dois pontos, a ideia de conexão
+  entre quem pede ajuda e quem resolve. Splash de entrada uma vez por sessão.
+- Console com lateral escura para a fila, métricas no topo e o painel do funcionário à direita.
 
 ## Arquitetura
 
@@ -97,7 +108,7 @@ corpo da requisição. O serviço de chamados responde 404 para chamado de outra
 - **E2E** do fluxo principal com Playwright.
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test   # 85 testes
+pnpm typecheck && pnpm lint && pnpm test   # 87 testes
 pnpm test:e2e                              # Playwright (sobe tudo sozinho)
 pnpm eval                                  # cenários com o modelo do .env
 ```

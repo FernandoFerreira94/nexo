@@ -8,13 +8,28 @@ import {
   type QuickReply,
   type StreamEvent,
 } from '@nexo/shared'
+import {
+  BookOpen,
+  Headset,
+  KeyRound,
+  ListChecks,
+  SendHorizontal,
+  TriangleAlert,
+  Wifi,
+} from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Logo, LogoMark } from '@/components/brand/logo'
+import { UserAvatar } from '@/components/brand/user-avatar'
+import { UserMenu } from '@/components/brand/user-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { api, logout } from '@/lib/api'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
+import { api } from '@/lib/api'
 import { formatTime } from '@/lib/format'
 import { readEvents } from '@/lib/stream'
 import type { ChatMessage, ConversationState } from '@/lib/types'
+import { cn } from '@/lib/utils'
 import { MessageCard } from './cards'
 import { ActionLine, TracePanel } from './trace-panel'
 
@@ -44,13 +59,13 @@ const EMPTY_LIVE: LiveReply = {
 }
 
 const SUGGESTIONS = [
-  'Como está o meu chamado?',
-  'Minha VPN está dando erro 809',
-  'Preciso de acesso a um sistema',
-  'Quero falar com um analista',
+  { icon: ListChecks, text: 'Como está o meu chamado?' },
+  { icon: Wifi, text: 'Minha VPN está dando erro 809' },
+  { icon: KeyRound, text: 'Preciso de acesso a um sistema' },
+  { icon: BookOpen, text: 'Qual o horário de atendimento?' },
 ]
 
-export function ChatView({ userName }: { userName: string }) {
+export function ChatView({ user }: { user: { name: string; department: string } }) {
   const [data, setData] = useState<ConversationResponse | null>(null)
   const [live, setLive] = useState<LiveReply | null>(null)
   const [pendingText, setPendingText] = useState<string | null>(null)
@@ -136,38 +151,32 @@ export function ChatView({ userName }: { userName: string }) {
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-4">
-          <div className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className="grid size-8 place-items-center rounded-lg bg-brand font-bold text-white"
-            >
-              N
-            </span>
-            <div className="leading-tight">
-              <p className="text-sm font-semibold">Nexo Assist</p>
-              <p className="text-xs text-ink-faint">Service desk de TI</p>
-            </div>
-          </div>
+      <header className="border-b bg-card/80 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-3 px-4">
+          <Logo subtitle="Service desk de TI" />
           <div className="flex items-center gap-3">
             {status && (
-              <Badge tone={status === 'with_agent' ? 'ok' : 'warn'}>
+              <Badge variant={status === 'with_agent' ? 'success' : 'warning'}>
+                <span
+                  className={cn(
+                    'size-1.5 rounded-full',
+                    status === 'with_agent' ? 'bg-success' : 'bg-warning',
+                  )}
+                />
                 {CONVERSATION_STATUS_LABELS[status]}
               </Badge>
             )}
-            <span className="hidden text-sm text-ink-soft sm:inline">{userName}</span>
-            <Button variant="ghost" size="sm" onClick={logout}>
-              Sair
-            </Button>
+            <UserMenu name={user.name} detail={user.department} role="employee" />
           </div>
         </div>
       </header>
 
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto grid max-w-3xl gap-4 px-4 py-6">
+        <div className="mx-auto grid max-w-3xl gap-6 px-4 py-8">
+          {!data && <LoadingState />}
+
           {data && messages.length === 0 && !pendingText && (
-            <Welcome name={userName.split(' ')[0] ?? userName} onPick={send} />
+            <Welcome name={user.name.split(' ')[0] ?? user.name} onPick={send} />
           )}
 
           {messages.map((message, index) => (
@@ -184,76 +193,102 @@ export function ChatView({ userName }: { userName: string }) {
             />
           ))}
 
-          {pendingText && <Bubble role="employee" text={pendingText} />}
+          {pendingText && <EmployeeBubble text={pendingText} />}
           {live && <LiveItem live={live} />}
 
-          {status && status !== 'with_agent' && !live && (
-            <div className="rounded-[var(--radius-card)] border border-warn/30 bg-warn-soft p-3 text-sm text-ink-soft">
-              {status === 'waiting_analyst'
-                ? 'Sua conversa está na fila de um analista, com o resumo do que conversamos. Pode continuar escrevendo aqui.'
-                : status === 'with_analyst'
-                  ? 'Você está falando com um analista.'
-                  : 'Atendimento encerrado.'}
-            </div>
-          )}
+          {status && status !== 'with_agent' && !live && <HandoffBanner status={status} />}
           <div ref={bottomRef} />
         </div>
       </main>
 
-      <footer className="border-t border-line bg-surface">
+      <footer className="border-t bg-card/80 backdrop-blur">
         <form
-          className="mx-auto flex max-w-3xl gap-2 px-4 py-3"
+          className="mx-auto max-w-3xl px-4 py-4"
           onSubmit={(event) => {
             event.preventDefault()
             send(input)
           }}
         >
-          <label htmlFor="message" className="sr-only">
-            Mensagem
-          </label>
-          <input
-            id="message"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            maxLength={2000}
-            placeholder={
-              status === 'closed'
-                ? 'Atendimento encerrado'
-                : 'Descreva o problema ou pergunte algo…'
-            }
-            disabled={status === 'closed'}
-            className="h-11 flex-1 rounded-lg border border-line bg-surface px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-          />
-          <Button type="submit" disabled={!input.trim() || live !== null}>
-            Enviar
-          </Button>
-        </form>
-        {error && (
-          <p role="alert" className="mx-auto max-w-3xl px-4 pb-3 text-sm text-danger">
-            {error}
+          <div className="flex items-end gap-2 rounded-xl border bg-card p-2 shadow-sm transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20">
+            <label htmlFor="message" className="sr-only">
+              Mensagem
+            </label>
+            <Textarea
+              id="message"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  send(input)
+                }
+              }}
+              rows={1}
+              maxLength={2000}
+              placeholder={
+                status === 'closed'
+                  ? 'Atendimento encerrado'
+                  : 'Descreva o problema ou pergunte algo…'
+              }
+              disabled={status === 'closed'}
+              className="max-h-40 min-h-9 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
+            />
+            <Button
+              type="submit"
+              size="icon"
+              aria-label="Enviar"
+              disabled={!input.trim() || live !== null}
+            >
+              <SendHorizontal />
+            </Button>
+          </div>
+          <p className="mt-2 text-center text-caption text-muted-foreground">
+            O assistente só abre chamados com a sua confirmação.
           </p>
-        )}
+          {error && (
+            <p
+              role="alert"
+              className="mt-2 flex items-center justify-center gap-1.5 text-body text-destructive"
+            >
+              <TriangleAlert className="size-4" /> {error}
+            </p>
+          )}
+        </form>
       </footer>
+    </div>
+  )
+}
+
+function LoadingState() {
+  return (
+    <div className="grid gap-4">
+      <Skeleton className="h-12 w-2/3" />
+      <Skeleton className="ml-auto h-10 w-1/2" />
+      <Skeleton className="h-24 w-3/4" />
     </div>
   )
 }
 
 function Welcome({ name, onPick }: { name: string; onPick: (text: string) => void }) {
   return (
-    <div className="animate-in py-10 text-center">
-      <h1 className="text-xl font-semibold">Oi, {name}! Como posso ajudar?</h1>
-      <p className="mt-1 text-sm text-ink-soft">
+    <div className="animate-in fade-in-0 slide-in-from-bottom-2 py-10 text-center duration-500">
+      <LogoMark className="mx-auto size-12" />
+      <h1 className="mt-5 text-display">Oi, {name}! Como posso ajudar?</h1>
+      <p className="mx-auto mt-2 max-w-md text-body text-muted-foreground">
         Tiro dúvidas de TI, consulto seus chamados e preparo chamados novos para você confirmar.
       </p>
-      <div className="mt-6 flex flex-wrap justify-center gap-2">
-        {SUGGESTIONS.map((s) => (
+      <div className="mx-auto mt-8 grid max-w-xl gap-2 sm:grid-cols-2">
+        {SUGGESTIONS.map(({ icon: Icon, text }) => (
           <button
-            key={s}
+            key={text}
             type="button"
-            onClick={() => onPick(s)}
-            className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-ink-soft hover:border-brand hover:text-brand"
+            onClick={() => onPick(text)}
+            className="group flex items-center gap-3 rounded-lg border bg-card p-3 text-left text-body shadow-xs transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            {s}
+            <span className="grid size-8 place-items-center rounded-md bg-accent text-accent-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+              <Icon className="size-4" />
+            </span>
+            {text}
           </button>
         ))}
       </div>
@@ -273,15 +308,22 @@ function MessageItem({
   onQuickReply?: (reply: QuickReply) => void
 }) {
   if (message.role === 'system') {
-    return <p className="text-center text-xs text-ink-faint">{message.content}</p>
+    return (
+      <div className="flex items-center gap-3 text-caption text-muted-foreground">
+        <span className="h-px flex-1 bg-border" />
+        {message.content}
+        <span className="h-px flex-1 bg-border" />
+      </div>
+    )
   }
-  if (message.role === 'employee')
-    return <Bubble role="employee" text={message.content} time={message.createdAt} />
+  if (message.role === 'employee') {
+    return <EmployeeBubble text={message.content} time={message.createdAt} />
+  }
 
   return (
-    <div className="animate-in grid gap-2">
+    <AgentRow role={message.role}>
       {message.trace && <ActionLine actions={message.trace.actions} />}
-      <Bubble role={message.role} text={message.content} time={message.createdAt} />
+      <ReplyBubble role={message.role} text={message.content} time={message.createdAt} />
       {message.cards.map((card, i) => {
         const actionable =
           card.type === 'draft' &&
@@ -292,69 +334,114 @@ function MessageItem({
         )
       })}
       {onQuickReply && message.quickReplies.length > 0 && (
-        <QuickReplies replies={message.quickReplies} onPick={onQuickReply} />
+        <div className="flex flex-wrap gap-2">
+          {message.quickReplies.map((reply) => (
+            <Button
+              key={reply.label}
+              variant="outline"
+              size="sm"
+              onClick={() => onQuickReply(reply)}
+            >
+              <Headset /> {reply.label}
+            </Button>
+          ))}
+        </div>
       )}
       {message.trace && <TracePanel trace={message.trace} />}
-    </div>
+    </AgentRow>
   )
 }
 
 function LiveItem({ live }: { live: LiveReply }) {
   return (
-    <div className="grid gap-2" aria-live="polite">
-      <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-soft">
-        {live.actions.map((a, i) => (
-          <li key={i} className="inline-flex items-center gap-1">
-            <span
-              aria-hidden
-              className={
-                a.status === 'running'
-                  ? 'animate-pulse text-brand'
-                  : a.status === 'ok'
-                    ? 'text-ok'
-                    : 'text-danger'
-              }
-            >
-              {a.status === 'running' ? '●' : a.status === 'ok' ? '✓' : '✕'}
-            </span>
-            {a.status === 'running' ? `${a.label}…` : a.label}
-          </li>
-        ))}
-      </ul>
+    <AgentRow role="agent" live>
+      <ActionLine actions={live.actions} />
       {live.text ? (
-        <Bubble role="agent" text={live.text} />
+        <ReplyBubble role="agent" text={live.text} />
       ) : (
-        <p className="text-sm text-ink-faint">Pensando…</p>
+        <div className="flex w-fit items-center gap-1 rounded-2xl rounded-tl-md border bg-card px-4 py-3">
+          {[0, 150, 300].map((delay) => (
+            <span
+              key={delay}
+              className="size-1.5 animate-bounce rounded-full bg-muted-foreground/60"
+              style={{ animationDelay: `${delay}ms` }}
+            />
+          ))}
+          <span className="sr-only">Pensando…</span>
+        </div>
       )}
       {live.cards.map((card, i) => (
         <MessageCard key={i} card={card} />
       ))}
       {live.notices.map((n, i) => (
-        <p key={i} className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-ink-soft">
-          {n}
+        <p
+          key={i}
+          className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-body"
+        >
+          <TriangleAlert className="size-4 text-warning" /> {n}
         </p>
       ))}
+    </AgentRow>
+  )
+}
+
+/** Mensagem do assistente ou do analista: avatar à esquerda e o conteúdo em coluna. */
+function AgentRow({
+  role,
+  live = false,
+  children,
+}: {
+  role: 'agent' | 'analyst'
+  live?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      className="flex animate-in gap-3 fade-in-0 slide-in-from-bottom-1 duration-300"
+      aria-live={live ? 'polite' : undefined}
+    >
+      {role === 'analyst' ? (
+        <UserAvatar name="Analista" role="analyst" className="mt-0.5 size-7" />
+      ) : (
+        <LogoMark className="mt-0.5 size-7" />
+      )}
+      <div className="grid min-w-0 flex-1 gap-2">{children}</div>
     </div>
   )
 }
 
-function Bubble({ role, text, time }: { role: ChatMessage['role']; text: string; time?: string }) {
-  const mine = role === 'employee'
+function ReplyBubble({
+  role,
+  text,
+  time,
+}: {
+  role: 'agent' | 'analyst'
+  text: string
+  time?: string
+}) {
   return (
-    <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-          mine
-            ? 'rounded-br-md bg-brand text-white'
-            : role === 'analyst'
-              ? 'rounded-bl-md border border-warn/30 bg-warn-soft text-ink'
-              : 'rounded-bl-md border border-line bg-surface text-ink'
-        }`}
-      >
-        {role === 'analyst' && <p className="mb-0.5 text-xs font-semibold text-warn">Analista</p>}
+    <div
+      className={cn(
+        'w-fit max-w-[90%] whitespace-pre-wrap rounded-2xl rounded-tl-md border px-4 py-3 text-body shadow-xs',
+        role === 'analyst' ? 'border-warning/30 bg-warning/10' : 'bg-card',
+      )}
+    >
+      {role === 'analyst' && <p className="mb-1 text-overline text-warning">Analista</p>}
+      {text}
+      {time && (
+        <span className="mt-1.5 block text-caption text-muted-foreground">{formatTime(time)}</span>
+      )}
+    </div>
+  )
+}
+
+function EmployeeBubble({ text, time }: { text: string; time?: string }) {
+  return (
+    <div className="flex animate-in justify-end fade-in-0 slide-in-from-bottom-1 duration-300">
+      <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-4 py-3 text-body text-primary-foreground shadow-sm">
         {text}
         {time && (
-          <span className={`mt-1 block text-[11px] ${mine ? 'text-white/70' : 'text-ink-faint'}`}>
+          <span className="mt-1.5 block text-right text-caption text-primary-foreground/70">
             {formatTime(time)}
           </span>
         )}
@@ -363,20 +450,22 @@ function Bubble({ role, text, time }: { role: ChatMessage['role']; text: string;
   )
 }
 
-function QuickReplies({
-  replies,
-  onPick,
-}: {
-  replies: QuickReply[]
-  onPick: (reply: QuickReply) => void
-}) {
+function HandoffBanner({ status }: { status: ConversationState['status'] }) {
+  const text =
+    status === 'waiting_analyst'
+      ? 'Sua conversa está na fila de um analista, com o resumo do que conversamos. Pode continuar escrevendo aqui.'
+      : status === 'with_analyst'
+        ? 'Você está falando com um analista.'
+        : 'Atendimento encerrado.'
   return (
-    <div className="flex flex-wrap gap-2">
-      {replies.map((reply) => (
-        <Button key={reply.label} variant="secondary" size="sm" onClick={() => onPick(reply)}>
-          {reply.label}
-        </Button>
-      ))}
+    <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
+      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-warning/15 text-warning">
+        <Headset className="size-4" />
+      </span>
+      <div>
+        <p className="text-heading">{CONVERSATION_STATUS_LABELS[status]}</p>
+        <p className="text-body text-muted-foreground">{text}</p>
+      </div>
     </div>
   )
 }
@@ -385,8 +474,9 @@ function QuickReplies({
 function apply(live: LiveReply, event: StreamEvent): LiveReply {
   switch (event.type) {
     case 'action': {
-      if (event.status === 'running')
+      if (event.status === 'running') {
         return { ...live, actions: [...live.actions, { label: event.label, status: 'running' }] }
+      }
       const index = live.actions.findLastIndex(
         (a) => a.label === event.label && a.status === 'running',
       )

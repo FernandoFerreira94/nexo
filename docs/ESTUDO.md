@@ -39,7 +39,10 @@ prováveis com resposta, e onde mexer quando pedirem uma alteração ao vivo.
 - `src/server/db/`: banco do app (users, conversations, messages, decision_traces, drafts).
 - `src/app/api/`: rotas finas (validam com Zod e chamam `server/`).
 - `src/components/chat/`: chat, cartões e o painel "Como decidi". `src/components/console/`: console do analista.
-- `src/app/globals.css`: as cores e tokens visuais.
+- `src/components/ui/`: componentes shadcn/ui (botão, card, badge, abas, avatar, select, menu, tooltip…).
+- `src/components/brand/`: logo, splash de entrada, avatar com iniciais e menu do usuário.
+- `src/app/globals.css`: **o sistema de design**: tokens de cor, raios e a escala tipográfica.
+- `src/app/login/`: login de demonstração (perfil + pessoa, sem senha).
 
 **evals** e **e2e**: cenários de avaliação e teste Playwright.
 
@@ -87,6 +90,14 @@ A confiança que o modelo dá sobre si mesmo não é bem calibrada, então ela �
 **Quanto custa por conversa?**
 Com Claude Haiku 5.5, cerca de US$ 0,0007 por turno, menos de US$ 0,01 por conversa. Fora de escopo, saudação e transferência não chamam o modelo para responder. Cada resposta mostra tokens e custo no trace, e o console soma por conversa.
 
+**Por que login sem senha?**
+O desafio pede login simples para os usuários do seed. Escolher a pessoa já entra; o resto do sistema só
+confia no cookie assinado. Em produção, trocaria esta tela pelo SSO da empresa sem mexer no resto.
+
+**Como o visual fica consistente?**
+Todos os componentes vêm do shadcn/ui e leem as mesmas variáveis do `globals.css`. Ninguém usa cor ou
+tamanho solto: é `bg-primary`, `text-muted-foreground`, `text-body`. Mudar o token muda o produto inteiro.
+
 **O que é o Jev e por que está opcional?**
 Um modelo que só decide (escolha, sim/não, nota) e devolve probabilidades. Encaixa no passo "entender": mais rápido, mais barato e com confiança calibrada. Está atrás da interface `DecisionEngine` para comparar com o LLM nos evals antes de virar padrão.
 
@@ -116,7 +127,10 @@ SSO real, observabilidade (OpenTelemetry com o trace), evals noturnos com o mode
 | Novo campo no rascunho | schema `Draft` (`conversation.ts`), `inputSchema` e `nextDraft` de `draftTicket` (`tools.ts`), `DraftCard` (`cards.tsx`), envio em `submit` (`web/src/server/drafts.ts`) | `chat.test.ts` |
 | Novo status de chamado | `TICKET_STATUSES`, `TICKET_STATUS_LABELS` e, se contar como aberto, `OPEN_STATUSES` (`ticket.ts`); enum no schema do serviço; cor em `ticket-badges.tsx` | `app.test.ts` |
 | Mudar o tom das respostas | `buildAgentInstructions` em `agent/src/prompts.ts` | `pnpm eval` |
-| Mudar cores | tokens em `web/src/app/globals.css` | — |
+| Mudar cores ou raio | variáveis em `:root` de `web/src/app/globals.css` | — |
+| Mudar tipografia | `@utility text-*` em `globals.css`; fonte em `web/src/app/layout.tsx` | — |
+| Mudar a logo | `LogoMark` em `web/src/components/brand/logo.tsx` e `public/icon.svg` | — |
+| Novo componente shadcn | copiar para `web/src/components/ui/` (o `components.json` já está configurado para o CLI `npx shadcn add`) | — |
 
 ## 5. Comandos úteis
 

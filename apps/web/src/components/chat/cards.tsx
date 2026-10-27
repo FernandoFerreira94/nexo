@@ -4,21 +4,25 @@ import {
   AFFECTED_LABELS,
   CATEGORY_LABELS,
   TICKET_TYPE_LABELS,
-  type Card,
+  type Card as MessageCardData,
   type Draft,
   type TicketSummary,
 } from '@nexo/shared'
+import { BookOpen, Clock, FileText, LoaderCircle, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 import { PriorityBadge, StatusBadge } from '@/components/ui/ticket-badges'
 import { formatDateTime } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 export function MessageCard({
   card,
   onDraftAction,
 }: {
-  card: Card
+  card: MessageCardData
   onDraftAction?: (draft: Draft, action: 'confirm' | 'cancel') => Promise<void>
 }) {
   if (card.type === 'tickets') return <TicketList tickets={card.tickets} />
@@ -30,23 +34,32 @@ export function TicketList({ tickets }: { tickets: TicketSummary[] }) {
   return (
     <ul className="grid gap-2">
       {tickets.map((t) => (
-        <li
-          key={t.id}
-          className={`rounded-[var(--radius-card)] border bg-surface p-3 ${t.overdue ? 'border-danger/40' : 'border-line'}`}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs font-semibold text-ink">{t.id}</span>
-            <StatusBadge status={t.status} />
-            <PriorityBadge priority={t.priority} />
-            {t.overdue && <Badge tone="danger">Vencido</Badge>}
-          </div>
-          <p className="mt-1.5 text-sm text-ink">{t.title}</p>
-          <p className="mt-1 text-xs text-ink-faint">
-            {CATEGORY_LABELS[t.category]} · aberto em {formatDateTime(t.createdAt)}
-            {t.resolvedAt
-              ? ` · resolvido em ${formatDateTime(t.resolvedAt)}`
-              : ` · prazo ${formatDateTime(t.dueAt)}`}
-          </p>
+        <li key={t.id}>
+          <Card
+            className={cn(
+              'gap-0 py-3 shadow-xs transition-shadow hover:shadow-sm',
+              t.overdue && 'border-destructive/40 bg-destructive/[0.03]',
+            )}
+          >
+            <div className="flex flex-wrap items-center gap-1.5 px-4">
+              <span className="font-mono text-caption font-semibold text-foreground">{t.id}</span>
+              <StatusBadge status={t.status} />
+              <PriorityBadge priority={t.priority} />
+              {t.overdue && (
+                <Badge variant="destructive">
+                  <TriangleAlert /> Vencido
+                </Badge>
+              )}
+            </div>
+            <p className="mt-1.5 px-4 text-body font-medium">{t.title}</p>
+            <p className="mt-1 flex items-center gap-1 px-4 text-caption text-muted-foreground">
+              <Clock className="size-3" />
+              {CATEGORY_LABELS[t.category]} ·{' '}
+              {t.resolvedAt
+                ? `resolvido em ${formatDateTime(t.resolvedAt)}`
+                : `prazo ${formatDateTime(t.dueAt)}`}
+            </p>
+          </Card>
         </li>
       ))}
     </ul>
@@ -55,18 +68,15 @@ export function TicketList({ tickets }: { tickets: TicketSummary[] }) {
 
 function ArticleCard({ id, title }: { id: string; title: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-3">
-      <span
-        aria-hidden
-        className="grid size-8 place-items-center rounded-lg bg-brand-soft text-brand"
-      >
-        ?
+    <Card className="flex-row items-center gap-3 px-4 py-3 shadow-xs">
+      <span className="grid size-9 place-items-center rounded-lg bg-accent text-accent-foreground">
+        <BookOpen className="size-4" />
       </span>
       <div>
-        <p className="text-xs text-ink-faint">Central de ajuda · {id}</p>
-        <p className="text-sm font-medium text-ink">{title}</p>
+        <p className="text-overline text-muted-foreground">Central de ajuda · {id}</p>
+        <p className="mt-0.5 text-body font-medium">{title}</p>
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -85,7 +95,7 @@ function DraftCard({
   onAction?: (draft: Draft, action: 'confirm' | 'cancel') => Promise<void>
 }) {
   const [busy, setBusy] = useState<'confirm' | 'cancel' | null>(null)
-  const pending = draft.status === 'pending' && onAction
+  const actionable = draft.status === 'pending' && onAction
 
   async function run(action: 'confirm' | 'cancel') {
     if (!onAction) return
@@ -98,15 +108,30 @@ function DraftCard({
   }
 
   return (
-    <div className="rounded-[var(--radius-card)] border border-brand/30 bg-surface p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-ink">
-          {DRAFT_TITLES[draft.kind]}
-          {draft.ticketId ? ` ${draft.ticketId}` : ''}
-        </p>
+    <Card
+      className={cn(
+        'gap-4 py-4 shadow-sm',
+        actionable && 'border-primary/30 ring-4 ring-primary/5',
+        draft.status !== 'pending' && 'opacity-80',
+      )}
+    >
+      <div className="flex items-center justify-between gap-2 px-5">
+        <div className="flex items-center gap-2">
+          <span className="grid size-8 place-items-center rounded-md bg-accent text-accent-foreground">
+            <FileText className="size-4" />
+          </span>
+          <p className="text-heading">
+            {DRAFT_TITLES[draft.kind]}
+            {draft.ticketId ? ` ${draft.ticketId}` : ''}
+          </p>
+        </div>
         <Badge
-          tone={
-            draft.status === 'submitted' ? 'ok' : draft.status === 'cancelled' ? 'neutral' : 'brand'
+          variant={
+            draft.status === 'submitted'
+              ? 'success'
+              : draft.status === 'cancelled'
+                ? 'secondary'
+                : 'info'
           }
         >
           {draft.status === 'submitted'
@@ -117,12 +142,14 @@ function DraftCard({
         </Badge>
       </div>
 
-      <dl className="mt-3 grid gap-2 text-sm">
+      <Separator />
+
+      <dl className="grid gap-3 px-5 text-body">
         {draft.kind === 'create' && <Field label="Título">{draft.title}</Field>}
         <Field label={draft.kind === 'reopen' ? 'Motivo' : 'Descrição'}>{draft.description}</Field>
         {draft.kind === 'create' && (
           <>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {draft.type && <Field label="Tipo">{TICKET_TYPE_LABELS[draft.type]}</Field>}
               {draft.category && <Field label="Categoria">{CATEGORY_LABELS[draft.category]}</Field>}
               {draft.affected && <Field label="Afetados">{AFFECTED_LABELS[draft.affected]}</Field>}
@@ -133,40 +160,44 @@ function DraftCard({
               )}
             </div>
             {draft.priorityReason && (
-              <p className="rounded-lg bg-canvas p-2 text-xs text-ink-soft">
-                {draft.priorityReason}
-                {draft.slaLabel && ` Prazo: ${draft.slaLabel}`}
-                {draft.dueAtPreview && ` (até ${formatDateTime(draft.dueAtPreview)}).`}
+              <p className="flex gap-2 rounded-md bg-muted p-3 text-caption text-muted-foreground">
+                <Clock className="mt-px size-3.5 shrink-0" />
+                <span>
+                  {draft.priorityReason}
+                  {draft.slaLabel && ` Prazo: ${draft.slaLabel}`}
+                  {draft.dueAtPreview && ` (até ${formatDateTime(draft.dueAtPreview)}).`}
+                </span>
               </p>
             )}
           </>
         )}
       </dl>
 
-      {pending && (
-        <div className="mt-4 flex gap-2">
+      {actionable && (
+        <div className="flex gap-2 px-5">
           <Button onClick={() => run('confirm')} disabled={busy !== null}>
-            {busy === 'confirm' ? 'Enviando…' : 'Confirmar'}
+            {busy === 'confirm' && <LoaderCircle className="animate-spin" />}
+            Confirmar
           </Button>
-          <Button variant="secondary" onClick={() => run('cancel')} disabled={busy !== null}>
+          <Button variant="outline" onClick={() => run('cancel')} disabled={busy !== null}>
             Descartar
           </Button>
         </div>
       )}
       {draft.status === 'pending' && !onAction && (
-        <p className="mt-3 text-xs text-ink-faint">
+        <p className="px-5 text-caption text-muted-foreground">
           Há uma versão mais nova deste rascunho abaixo.
         </p>
       )}
-    </div>
+    </Card>
   )
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs text-ink-faint">{label}</dt>
-      <dd className="text-ink">{children}</dd>
+      <dt className="text-overline text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-foreground">{children}</dd>
     </div>
   )
 }

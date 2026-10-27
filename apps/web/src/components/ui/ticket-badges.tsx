@@ -4,28 +4,30 @@ import {
   type Priority,
   type TicketStatus,
 } from '@nexo/shared'
-import { Badge, type Tone } from './badge'
+import { Badge } from './badge'
 
-const PRIORITY_TONE: Record<Priority, Tone> = {
-  critical: 'danger',
-  high: 'warn',
-  medium: 'brand',
-  low: 'neutral',
+type Variant = 'secondary' | 'info' | 'success' | 'warning' | 'destructive'
+
+const PRIORITY_VARIANT: Record<Priority, Variant> = {
+  critical: 'destructive',
+  high: 'warning',
+  medium: 'info',
+  low: 'secondary',
 }
 
-const STATUS_TONE: Record<TicketStatus, Tone> = {
-  open: 'brand',
-  awaiting_analyst: 'warn',
-  in_progress: 'brand',
-  approved: 'ok',
-  resolved: 'ok',
-  closed: 'neutral',
+const STATUS_VARIANT: Record<TicketStatus, Variant> = {
+  open: 'info',
+  awaiting_analyst: 'warning',
+  in_progress: 'info',
+  approved: 'success',
+  resolved: 'success',
+  closed: 'secondary',
 }
 
 export const PriorityBadge = ({ priority }: { priority: Priority }) => (
-  <Badge tone={PRIORITY_TONE[priority]}>{PRIORITY_LABELS[priority]}</Badge>
+  <Badge variant={PRIORITY_VARIANT[priority]}>{PRIORITY_LABELS[priority]}</Badge>
 )
 
 export const StatusBadge = ({ status }: { status: TicketStatus }) => (
-  <Badge tone={STATUS_TONE[status]}>{TICKET_STATUS_LABELS[status]}</Badge>
+  <Badge variant={STATUS_VARIANT[status]}>{TICKET_STATUS_LABELS[status]}</Badge>
 )

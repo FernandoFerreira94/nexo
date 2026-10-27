@@ -28,6 +28,7 @@ test('funcionário abre chamado com confirmação e analista assume a conversa',
 
   const marcos = await browser.newPage()
   await marcos.goto('/login')
+  await marcos.getByRole('tab', { name: 'Analista' }).click()
   await marcos.getByRole('button', { name: /Marcos Alves/ }).click()
   await marcos.waitForURL('**/console')
   await marcos.getByRole('button', { name: /Ana Souza/ }).click()

@@ -6,5 +6,5 @@ export default async function ChatPage() {
   const user = await getSessionUser()
   if (!user) redirect('/login')
   if (user.role !== 'employee') redirect('/console')
-  return <ChatView userName={user.name} />
+  return <ChatView user={{ name: user.name, department: user.department }} />
 }

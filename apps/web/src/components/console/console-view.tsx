@@ -7,14 +7,41 @@ import {
   type HandoffReason,
   type TicketSummary,
 } from '@nexo/shared'
+import {
+  CircleCheck,
+  Clock,
+  Inbox,
+  RotateCcw,
+  SendHorizontal,
+  Server,
+  TriangleAlert,
+  UserRoundCheck,
+  Zap,
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { MessageCard, TicketList } from '@/components/chat/cards'
 import { ActionLine, TracePanel } from '@/components/chat/trace-panel'
-import { Badge, type Tone } from '@/components/ui/badge'
+import { Logo, LogoMark } from '@/components/brand/logo'
+import { UserAvatar } from '@/components/brand/user-avatar'
+import { UserMenu } from '@/components/brand/user-menu'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { api, logout } from '@/lib/api'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { api } from '@/lib/api'
 import { formatTime, formatUsd, formatWait } from '@/lib/format'
 import type { ChatMessage } from '@/lib/types'
+import { cn } from '@/lib/utils'
 import type { Conversation } from '@/server/conversations'
 
 type QueueItem = Conversation & { userName: string; department: string }
@@ -26,21 +53,25 @@ type DetailResponse = {
   tickets: TicketSummary[] | null
 }
 
-const REASON_TONE: Record<HandoffReason, Tone> = {
-  critical: 'danger',
-  overdue: 'danger',
-  requested: 'brand',
-  low_confidence: 'warn',
-  message_limit: 'neutral',
+type BadgeVariant = 'destructive' | 'warning' | 'info' | 'secondary'
+const REASON_VARIANT: Record<HandoffReason, BadgeVariant> = {
+  critical: 'destructive',
+  overdue: 'destructive',
+  requested: 'info',
+  low_confidence: 'warning',
+  message_limit: 'secondary',
 }
 
 type StatusFilter = 'all' | 'waiting_analyst' | 'with_analyst'
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'Todas' },
+  { value: 'waiting_analyst', label: 'Na fila' },
+  { value: 'with_analyst', label: 'Atendendo' },
+]
 
-export function ConsoleView({
-  analyst,
-}: {
-  analyst: { id: string; name: string; department: string }
-}) {
+type Analyst = { id: string; name: string; department: string }
+
+export function ConsoleView({ analyst }: { analyst: Analyst }) {
   const [queue, setQueue] = useState<QueueResponse | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<DetailResponse | null>(null)
@@ -77,124 +108,194 @@ export function ConsoleView({
     }
   }
 
-  const items = (queue?.queue ?? []).filter(
+  const all = queue?.queue ?? []
+  const items = all.filter(
     (item) =>
       (statusFilter === 'all' || item.status === statusFilter) &&
       (reasonFilter === 'all' || item.handoffReason === reasonFilter),
   )
+  const serviceDown = queue?.ticketsService === 'open'
 
   return (
-    <div className="flex h-dvh flex-col">
-      <header className="flex h-14 items-center justify-between gap-3 border-b border-line bg-surface px-4">
-        <div className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className="grid size-8 place-items-center rounded-lg bg-brand font-bold text-white"
-          >
-            N
-          </span>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold">Console do analista</p>
-            <p className="text-xs text-ink-faint">
-              {analyst.name} · {analyst.department}
-            </p>
-          </div>
+    <div className="grid h-dvh grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_340px]">
+      {/* Fila */}
+      <aside className="flex min-h-0 flex-col bg-sidebar text-sidebar-foreground">
+        <div className="px-5 pb-4 pt-5">
+          <Logo inverted subtitle="Console do analista" />
         </div>
-        <div className="flex items-center gap-2">
-          <Badge tone={queue?.ticketsService === 'open' ? 'danger' : 'ok'}>
-            Sistema de chamados {queue?.ticketsService === 'open' ? 'instável' : 'ok'}
-          </Badge>
-          <Button
-            variant="secondary"
-            size="sm"
-            title="Demonstração: o sistema de chamados fica fora do ar por 20 segundos"
-            onClick={() => act('/api/console/chaos', { downForSeconds: 20 })}
-          >
-            Simular queda
-          </Button>
-          <Button variant="ghost" size="sm" onClick={logout}>
-            Sair
-          </Button>
-        </div>
-      </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[320px_1fr] xl:grid-cols-[320px_1fr_340px]">
-        <aside className="flex min-h-0 flex-col border-r border-line bg-surface">
-          <div className="grid gap-2 border-b border-line p-3">
-            <div className="flex gap-1">
-              {(['all', 'waiting_analyst', 'with_analyst'] as const).map((value) => (
-                <FilterChip
-                  key={value}
-                  active={statusFilter === value}
-                  onClick={() => setStatusFilter(value)}
-                >
-                  {value === 'all' ? 'Todas' : CONVERSATION_STATUS_LABELS[value]}
-                </FilterChip>
-              ))}
-            </div>
-            <select
-              value={reasonFilter}
-              onChange={(e) => setReasonFilter(e.target.value as HandoffReason | 'all')}
-              className="h-8 rounded-lg border border-line bg-surface px-2 text-sm"
-              aria-label="Filtrar por motivo"
-            >
-              <option value="all">Todos os motivos</option>
-              {HANDOFF_REASONS.map((r) => (
-                <option key={r} value={r}>
-                  {HANDOFF_REASON_LABELS[r]}
-                </option>
-              ))}
-            </select>
+        <div className="grid grid-cols-3 gap-2 px-4">
+          <Metric
+            label="Na fila"
+            value={all.filter((i) => i.status === 'waiting_analyst').length}
+          />
+          <Metric label="Atendendo" value={all.filter((i) => i.status === 'with_analyst').length} />
+          <Metric
+            label="Críticas"
+            value={
+              all.filter((i) => i.handoffReason === 'critical' || i.overdueTicketIds.length > 0)
+                .length
+            }
+            alert
+          />
+        </div>
+
+        <div className="mt-4 grid gap-2 px-4">
+          <div className="flex gap-1 rounded-lg bg-sidebar-accent p-1">
+            {STATUS_FILTERS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={statusFilter === value}
+                onClick={() => setStatusFilter(value)}
+                className={cn(
+                  'flex-1 rounded-md px-2 py-1 text-caption font-medium transition-colors',
+                  statusFilter === value
+                    ? 'bg-sidebar text-sidebar-foreground shadow-sm'
+                    : 'text-sidebar-muted hover:text-sidebar-foreground',
+                )}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <ul className="min-h-0 flex-1 overflow-y-auto">
+          <Select
+            value={reasonFilter}
+            onValueChange={(v) => setReasonFilter(v as HandoffReason | 'all')}
+          >
+            <SelectTrigger
+              size="sm"
+              aria-label="Filtrar por motivo"
+              className="w-full border-sidebar-border bg-sidebar-accent text-sidebar-foreground"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os motivos</SelectItem>
+              {HANDOFF_REASONS.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {HANDOFF_REASON_LABELS[r]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <ScrollArea className="mt-3 min-h-0 flex-1">
+          <ul className="grid gap-1 px-2 pb-3">
             {items.length === 0 && (
-              <li className="p-6 text-center text-sm text-ink-faint">Nenhuma conversa na fila.</li>
+              <li className="grid justify-items-center gap-2 px-4 py-10 text-center text-caption text-sidebar-muted">
+                <Inbox className="size-6" />
+                Nenhuma conversa aqui.
+              </li>
             )}
             {items.map((item) => (
               <li key={item.id}>
                 <button
                   type="button"
                   onClick={() => setSelectedId(item.id)}
-                  className={`grid w-full gap-1 border-b border-line px-3 py-3 text-left hover:bg-canvas ${
-                    selectedId === item.id ? 'bg-brand-soft' : ''
-                  }`}
+                  className={cn(
+                    'flex w-full gap-3 rounded-lg px-3 py-3 text-left transition-colors',
+                    selectedId === item.id
+                      ? 'bg-sidebar-accent ring-1 ring-sidebar-border'
+                      : 'hover:bg-sidebar-accent/60',
+                  )}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{item.userName}</span>
-                    <span className="text-xs text-ink-faint">{formatWait(item.handoffAt)}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {item.handoffReason && (
-                      <Badge tone={REASON_TONE[item.handoffReason]}>
-                        {HANDOFF_REASON_LABELS[item.handoffReason]}
-                      </Badge>
-                    )}
-                    <Badge tone={item.status === 'with_analyst' ? 'ok' : 'neutral'}>
-                      {CONVERSATION_STATUS_LABELS[item.status]}
-                    </Badge>
-                    {item.overdueTicketIds.length > 0 && <Badge tone="danger">Vencido</Badge>}
-                  </div>
-                  <p className="line-clamp-1 text-xs text-ink-soft">{item.department}</p>
+                  <UserAvatar name={item.userName} className="size-9" />
+                  <span className="grid min-w-0 flex-1 gap-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate text-body font-medium">{item.userName}</span>
+                      <span className="flex shrink-0 items-center gap-1 text-caption text-sidebar-muted">
+                        <Clock className="size-3" />
+                        {formatWait(item.handoffAt)}
+                      </span>
+                    </span>
+                    <span className="flex flex-wrap gap-1">
+                      {item.handoffReason && (
+                        <Badge variant={REASON_VARIANT[item.handoffReason]}>
+                          {HANDOFF_REASON_LABELS[item.handoffReason]}
+                        </Badge>
+                      )}
+                      {item.overdueTicketIds.length > 0 && (
+                        <Badge variant="destructive">
+                          <TriangleAlert /> Vencido
+                        </Badge>
+                      )}
+                    </span>
+                    <span className="truncate text-caption text-sidebar-muted">
+                      {item.department} · {CONVERSATION_STATUS_LABELS[item.status]}
+                    </span>
+                  </span>
                 </button>
               </li>
             ))}
           </ul>
-        </aside>
+        </ScrollArea>
 
-        <section className="flex min-h-0 flex-col">
-          {detail && selectedId ? (
-            <ConversationPanel detail={detail} analystId={analyst.id} act={act} error={error} />
-          ) : (
-            <div className="grid flex-1 place-items-center text-sm text-ink-faint">
-              Selecione uma conversa da fila.
+        <Separator className="bg-sidebar-border" />
+        <div className="flex items-center justify-between gap-2 p-3">
+          <UserMenu name={analyst.name} detail={analyst.department} role="analyst" inverted />
+        </div>
+      </aside>
+
+      {/* Conversa */}
+      <section className="flex min-h-0 flex-col">
+        <header className="flex h-16 items-center justify-end gap-2 border-b bg-card px-5">
+          <Badge variant={serviceDown ? 'destructive' : 'success'}>
+            <Server /> Sistema de chamados {serviceDown ? 'instável' : 'operando'}
+          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => act('/api/console/chaos', { downForSeconds: 20 })}
+              >
+                <Zap /> Simular queda
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Demonstração: o sistema de chamados fica fora do ar por 20 segundos.
+            </TooltipContent>
+          </Tooltip>
+        </header>
+
+        {detail && selectedId ? (
+          <ConversationPanel detail={detail} analystId={analyst.id} act={act} error={error} />
+        ) : (
+          <div className="grid flex-1 place-items-center p-8 text-center">
+            <div className="grid justify-items-center gap-3">
+              <LogoMark className="size-12 opacity-90" />
+              <p className="text-heading">Selecione uma conversa da fila</p>
+              <p className="max-w-xs text-body text-muted-foreground">
+                As críticas e com chamado vencido aparecem primeiro, com o resumo do caso.
+              </p>
             </div>
-          )}
-        </section>
+          </div>
+        )}
+      </section>
 
-        <aside className="hidden min-h-0 overflow-y-auto border-l border-line bg-surface p-4 xl:block">
-          {detail ? <EmployeePanel detail={detail} /> : null}
-        </aside>
-      </div>
+      {/* Funcionário */}
+      <aside className="hidden min-h-0 overflow-y-auto border-l bg-card xl:block">
+        {detail ? <EmployeePanel detail={detail} /> : null}
+      </aside>
+    </div>
+  )
+}
+
+function Metric({
+  label,
+  value,
+  alert = false,
+}: {
+  label: string
+  value: number
+  alert?: boolean
+}) {
+  return (
+    <div className="rounded-lg bg-sidebar-accent px-3 py-2 ring-1 ring-sidebar-border">
+      <p className={cn('text-title', alert && value > 0 && 'text-destructive')}>{value}</p>
+      <p className="text-caption text-sidebar-muted">{label}</p>
     </div>
   )
 }
@@ -215,68 +316,96 @@ function ConversationPanel({
   const base = `/api/console/conversations/${conversation.id}`
   const mine =
     conversation.status === 'with_analyst' && conversation.assignedAnalystId === analystId
+  const cost = detail.messages.reduce((sum, m) => sum + (m.trace?.costUsd ?? 0), 0)
+  const name = detail.employee?.name ?? 'Funcionário'
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold">{detail.employee?.name}</p>
-          <p className="text-xs text-ink-faint">
-            {CONVERSATION_STATUS_LABELS[conversation.status]} · custo do assistente{' '}
-            {formatUsd(detail.messages.reduce((sum, m) => sum + (m.trace?.costUsd ?? 0), 0))}
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-card px-5 py-4">
+        <div className="flex items-center gap-3">
+          <UserAvatar name={name} className="size-10" />
+          <div>
+            <p className="text-heading">{name}</p>
+            <p className="text-caption text-muted-foreground">
+              {CONVERSATION_STATUS_LABELS[conversation.status]} · custo do assistente{' '}
+              {formatUsd(cost)}
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
           {conversation.status === 'waiting_analyst' && (
-            <Button onClick={() => act(`${base}/assume`)}>Assumir</Button>
+            <Button onClick={() => act(`${base}/assume`)}>
+              <UserRoundCheck /> Assumir
+            </Button>
           )}
           {mine && (
             <>
-              <Button variant="secondary" onClick={() => act(`${base}/return`)}>
-                Devolver ao assistente
+              <Button variant="outline" onClick={() => act(`${base}/return`)}>
+                <RotateCcw /> Devolver ao assistente
               </Button>
-              <Button variant="danger" onClick={() => act(`${base}/close`)}>
-                Encerrar
+              <Button variant="outline" onClick={() => act(`${base}/close`)}>
+                <CircleCheck /> Encerrar
               </Button>
             </>
           )}
         </div>
       </div>
 
-      {conversation.handoffSummary && (
-        <div className="border-b border-line bg-warn-soft px-4 py-3 text-sm">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warn">
-            Resumo da transferência
-          </p>
-          <p className="whitespace-pre-wrap text-ink-soft">{conversation.handoffSummary}</p>
-        </div>
-      )}
+      <ScrollArea className="min-h-0 flex-1 bg-background">
+        <div className="mx-auto grid max-w-2xl gap-5 px-5 py-6">
+          {conversation.handoffSummary && (
+            <Card className="gap-3 border-warning/30 bg-warning/[0.06] py-4 shadow-none">
+              <CardHeader className="px-5">
+                <CardTitle className="flex items-center gap-2 text-overline text-warning">
+                  <TriangleAlert className="size-3.5" /> Resumo da transferência
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="whitespace-pre-wrap px-5 text-body text-muted-foreground">
+                {conversation.handoffSummary}
+              </CardContent>
+            </Card>
+          )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <ul className="mx-auto grid max-w-2xl gap-4">
-          {detail.messages.map((m) => (
-            <li key={m.id}>
-              {m.role === 'system' ? (
-                <p className="text-center text-xs text-ink-faint">{m.content}</p>
-              ) : (
-                <div className="grid gap-2">
-                  <p className="text-xs font-medium text-ink-faint">
-                    {m.role === 'employee'
-                      ? detail.employee?.name
-                      : m.role === 'agent'
-                        ? 'Assistente'
-                        : 'Analista'}{' '}
+          {detail.messages.map((m) =>
+            m.role === 'system' ? (
+              <div
+                key={m.id}
+                className="flex items-center gap-3 text-caption text-muted-foreground"
+              >
+                <span className="h-px flex-1 bg-border" />
+                {m.content}
+                <span className="h-px flex-1 bg-border" />
+              </div>
+            ) : (
+              <div key={m.id} className="flex gap-3">
+                {m.role === 'agent' ? (
+                  <LogoMark className="mt-0.5 size-7" />
+                ) : (
+                  <UserAvatar
+                    name={m.role === 'employee' ? name : 'Analista'}
+                    role={m.role === 'analyst' ? 'analyst' : 'employee'}
+                    className="mt-0.5 size-7"
+                  />
+                )}
+                <div className="grid min-w-0 flex-1 gap-2">
+                  <p className="text-caption text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      {m.role === 'employee'
+                        ? name
+                        : m.role === 'agent'
+                          ? 'Assistente'
+                          : 'Analista'}
+                    </span>{' '}
                     · {formatTime(m.createdAt)}
                   </p>
                   {m.trace && <ActionLine actions={m.trace.actions} />}
                   <p
-                    className={`whitespace-pre-wrap rounded-xl px-3 py-2 text-sm ${
-                      m.role === 'employee'
-                        ? 'bg-brand-soft'
-                        : m.role === 'analyst'
-                          ? 'bg-warn-soft'
-                          : 'border border-line bg-surface'
-                    }`}
+                    className={cn(
+                      'w-fit max-w-full whitespace-pre-wrap rounded-xl border px-4 py-2.5 text-body',
+                      m.role === 'employee' && 'border-primary/15 bg-accent',
+                      m.role === 'analyst' && 'border-warning/30 bg-warning/10',
+                      m.role === 'agent' && 'bg-card',
+                    )}
                   >
                     {m.content}
                   </p>
@@ -285,86 +414,71 @@ function ConversationPanel({
                   ))}
                   {m.trace && <TracePanel trace={m.trace} />}
                 </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      </div>
+              </div>
+            ),
+          )}
+        </div>
+      </ScrollArea>
 
       <form
-        className="flex gap-2 border-t border-line bg-surface px-4 py-3"
+        className="border-t bg-card px-5 py-4"
         onSubmit={(e) => {
           e.preventDefault()
           if (!reply.trim()) return
           void act(`${base}/reply`, { text: reply }).then(() => setReply(''))
         }}
       >
-        <input
-          value={reply}
-          onChange={(e) => setReply(e.target.value)}
-          disabled={!mine}
-          aria-label="Resposta ao funcionário"
-          placeholder={mine ? 'Responder ao funcionário…' : 'Assuma a conversa para responder'}
-          className="h-10 flex-1 rounded-lg border border-line px-3 text-sm outline-none focus:border-brand disabled:bg-canvas"
-        />
-        <Button type="submit" disabled={!mine || !reply.trim()}>
-          Enviar
-        </Button>
+        <div className="mx-auto flex max-w-2xl gap-2">
+          <Input
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
+            disabled={!mine}
+            aria-label="Resposta ao funcionário"
+            placeholder={mine ? 'Responder ao funcionário…' : 'Assuma a conversa para responder'}
+            className="h-10"
+          />
+          <Button type="submit" size="lg" disabled={!mine || !reply.trim()}>
+            <SendHorizontal /> Enviar
+          </Button>
+        </div>
+        {error && (
+          <p role="alert" className="mx-auto mt-2 max-w-2xl text-body text-destructive">
+            {error}
+          </p>
+        )}
       </form>
-      {error && (
-        <p role="alert" className="bg-surface px-4 pb-3 text-sm text-danger">
-          {error}
-        </p>
-      )}
     </>
   )
 }
 
 function EmployeePanel({ detail }: { detail: DetailResponse }) {
+  const name = detail.employee?.name ?? 'Funcionário'
   return (
-    <div className="grid gap-4">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Funcionário</p>
-        <p className="mt-1 text-sm font-medium">{detail.employee?.name}</p>
-        <p className="text-xs text-ink-soft">
-          {detail.employee?.department} · {detail.employee?.email}
-        </p>
+    <div className="grid gap-6 p-5">
+      <div className="flex items-center gap-3">
+        <UserAvatar name={name} className="size-12 text-base" />
+        <div className="min-w-0">
+          <p className="text-heading">{name}</p>
+          <p className="truncate text-caption text-muted-foreground">
+            {detail.employee?.department}
+          </p>
+          <p className="truncate text-caption text-muted-foreground">{detail.employee?.email}</p>
+        </div>
       </div>
-      <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          Chamados
-        </p>
+      <Separator />
+      <div className="grid gap-3">
+        <p className="text-overline text-muted-foreground">Chamados do funcionário</p>
         {detail.tickets === null ? (
-          <p className="rounded-lg bg-warn-soft p-3 text-sm text-ink-soft">
+          <p className="flex gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-body text-muted-foreground">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
             Sistema de chamados indisponível agora.
           </p>
         ) : detail.tickets.length === 0 ? (
-          <p className="text-sm text-ink-faint">Nenhum chamado.</p>
+          <p className="text-body text-muted-foreground">Nenhum chamado.</p>
         ) : (
           <TicketList tickets={detail.tickets} />
         )}
       </div>
     </div>
-  )
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-full px-2.5 py-1 text-xs font-medium ${active ? 'bg-brand text-white' : 'bg-canvas text-ink-soft hover:text-ink'}`}
-    >
-      {children}
-    </button>
   )
 }

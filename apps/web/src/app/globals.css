@@ -1,52 +1,161 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
 /*
- * Tokens visuais num lugar só. Para seguir o protótipo, ajuste aqui
- * (cores, raio, fonte) e os componentes acompanham.
+ * SISTEMA DE DESIGN DO NEXO ASSIST: tudo que é visual nasce aqui.
+ *
+ * 1. Tokens de cor (variáveis CSS, padrão shadcn/ui), em OKLCH.
+ * 2. Ponte para o Tailwind (@theme inline): cada token vira classe (bg-primary, text-muted-foreground…).
+ * 3. Tipografia: escala com nomes de uso (text-display, text-title…), não tamanhos soltos.
+ *
+ * Para mudar a cara do produto, mude os valores daqui: os componentes acompanham.
  */
-@theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-  --color-canvas: #f6f7f9;
-  --color-surface: #ffffff;
-  --color-line: #e4e7ec;
-  --color-ink: #101828;
-  --color-ink-soft: #475467;
-  --color-ink-faint: #98a2b3;
+:root {
+  --radius: 0.75rem;
 
-  --color-brand: #3b5bdb;
-  --color-brand-strong: #2f4ac0;
-  --color-brand-soft: #edf2ff;
+  /* Base: cinza frio claro com tinta azul-marinho, sóbrio e corporativo. */
+  --background: oklch(0.985 0.003 255);
+  --foreground: oklch(0.2 0.03 262);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
 
-  --color-ok: #12b76a;
-  --color-ok-soft: #ecfdf3;
-  --color-warn: #f79009;
-  --color-warn-soft: #fffaeb;
-  --color-danger: #f04438;
-  --color-danger-soft: #fef3f2;
+  /* Marca: azul índigo da Nexo. */
+  --primary: oklch(0.47 0.17 266);
+  --primary-foreground: oklch(0.99 0 0);
+  --brand-from: oklch(0.5 0.19 270);
+  --brand-to: oklch(0.66 0.13 215);
 
-  --radius-card: 14px;
+  --secondary: oklch(0.96 0.008 260);
+  --secondary-foreground: oklch(0.27 0.04 262);
+  --muted: oklch(0.965 0.006 258);
+  --muted-foreground: oklch(0.52 0.025 258);
+  --accent: oklch(0.955 0.015 266);
+  --accent-foreground: oklch(0.3 0.08 266);
+
+  --border: oklch(0.915 0.008 258);
+  --input: oklch(0.9 0.01 258);
+  --ring: oklch(0.6 0.15 266);
+
+  /* Estados do service desk. */
+  --destructive: oklch(0.58 0.21 27);
+  --success: oklch(0.58 0.13 158);
+  --warning: oklch(0.66 0.15 62);
+  --info: oklch(0.55 0.15 250);
+
+  /* Lateral escura do console do analista. */
+  --sidebar: oklch(0.21 0.035 266);
+  --sidebar-foreground: oklch(0.93 0.01 260);
+  --sidebar-muted: oklch(0.68 0.03 262);
+  --sidebar-accent: oklch(0.28 0.045 266);
+  --sidebar-border: oklch(0.3 0.04 266);
 }
 
-html,
-body {
-  background: var(--color-canvas);
-  color: var(--color-ink);
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-brand-from: var(--brand-from);
+  --color-brand-to: var(--brand-to);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .animate-in {
-    animation: fade-up 180ms ease-out both;
+/* Tipografia: use estes nomes nas telas. */
+@utility text-display {
+  font-size: 2rem;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+@utility text-title {
+  font-size: 1.375rem;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+@utility text-heading {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+@utility text-body {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+@utility text-caption {
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+@utility text-overline {
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv11', 'ss01';
   }
 }
 
-@keyframes fade-up {
+/* Movimento com propósito: entrada suave das mensagens e da splash. Respeita quem pede menos movimento. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+[data-splash='off'] [data-splash] {
+  display: none;
+}
+
+@keyframes splash-progress {
   from {
-    opacity: 0;
-    transform: translateY(4px);
+    transform: scaleX(0);
   }
   to {
-    opacity: 1;
-    transform: none;
+    transform: scaleX(1);
   }
 }

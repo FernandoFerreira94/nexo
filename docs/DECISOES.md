@@ -362,3 +362,11 @@ nexo-assist/
 - [x] Logs sem conteúdo de mensagens nem valores do `.env`.
 - [x] Rate limit por usuário no chat (20 por minuto).
 - [x] Segredos só no `.env` (fora do git); `.env.example` com valores fictícios.
+
+## Redesenho da interface (27/10/2026, tarde)
+
+- **shadcn/ui em todos os componentes.** O registro do shadcn não é acessível de dentro do ambiente de desenvolvimento usado, então os componentes foram escritos seguindo o código oficial (estilo new-york, Radix + `class-variance-authority`). O `components.json` está pronto para `npx shadcn add` em uma máquina com internet.
+- **Sistema de design no `globals.css`:** tokens OKLCH, escala tipográfica nomeada e o `tailwind-merge` configurado para reconhecer essa escala (senão ele descartava o tamanho ao juntar com uma cor).
+- **Login sem senha**, escolhendo perfil e pessoa (pedido para facilitar o teste). A sessão continua sendo o cookie assinado.
+- **Splash** uma vez por sessão do navegador, só visual (não bloqueia cliques) e escondida por um script antes da pintura quando já foi vista.
+- Sem tema escuro nesta entrega.
