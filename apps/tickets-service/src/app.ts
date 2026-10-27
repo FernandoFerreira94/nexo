@@ -99,14 +99,12 @@ export function createApp({ db, chaos, serviceToken, now = () => new Date() }: A
   app.post('/tickets/:id/transfer', async (c) => {
     const body = TransferBody.safeParse(await c.req.json().catch(() => null))
     if (!body.success) return invalid(c, body.error)
-    const ticket = transferTicket(
-      db,
-      c.req.param('id'),
-      body.data.requesterId,
-      body.data.summary,
-      now(),
-    )
-    return c.json(ticket)
+    const { requesterId, summary } = body.data
+    const result = withIdempotency(db, c.req.header('idempotency-key'), () => ({
+      statusCode: 200,
+      body: transferTicket(db, c.req.param('id'), requesterId, summary, now()),
+    }))
+    return c.json(result.body, result.statusCode as 200)
   })
 
   app.onError((error, c) => {
