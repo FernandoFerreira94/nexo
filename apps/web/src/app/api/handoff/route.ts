@@ -11,6 +11,6 @@ export async function POST(request: Request) {
   return handle(async () => {
     const user = await requireUser('employee')
     const { reason } = Body.parse(await request.json())
-    return ndjson(handleQuickHandoff(getRuntime(), user, reason))
+    return ndjson(handleQuickHandoff(await getRuntime(), user, reason))
   })
 }

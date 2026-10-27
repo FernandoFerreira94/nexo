@@ -10,6 +10,6 @@ export async function POST(request: Request) {
     const user = await requireUser('employee')
     rateLimit(user.id)
     const { text } = Body.parse(await request.json())
-    return ndjson(handleEmployeeMessage(getRuntime(), user, text))
+    return ndjson(handleEmployeeMessage(await getRuntime(), user, text))
   })
 }

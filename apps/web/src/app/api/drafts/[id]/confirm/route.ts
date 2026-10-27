@@ -10,6 +10,6 @@ export async function POST(request: Request, ctx: RouteContext<'/api/drafts/[id]
     const user = await requireUser('employee')
     const { id } = await ctx.params
     const { version } = Body.parse(await request.json())
-    return json({ message: await confirmDraft(getRuntime(), user.id, id, version) })
+    return json({ message: await confirmDraft(await getRuntime(), user.id, id, version) })
   })
 }

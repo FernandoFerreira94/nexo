@@ -9,7 +9,7 @@ export async function POST(
   return handle(async () => {
     const analyst = await requireUser('analyst')
     const { id } = await ctx.params
-    closeConversation(getRuntime().db, id, analyst.id)
+    await closeConversation((await getRuntime()).db, id, analyst.id)
     return json({ ok: true })
   })
 }

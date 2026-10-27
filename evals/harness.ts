@@ -28,7 +28,7 @@ export async function runScenario(
   scenario: Scenario,
   deps: { config: AgentConfig; model: LanguageModel; decision: DecisionEngine },
 ): Promise<ScenarioRun> {
-  const service = createInMemoryTicketsService(EVAL_NOW)
+  const service = await createInMemoryTicketsService(EVAL_NOW)
   service.chaos.state.failureRate = scenario.chaos ?? 0
   const tickets = createTicketsClient({
     baseUrl: 'http://tickets',

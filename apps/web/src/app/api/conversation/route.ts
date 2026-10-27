@@ -6,16 +6,16 @@ import { getRuntime } from '@/server/runtime'
 export async function GET() {
   return handle(async () => {
     const user = await requireUser('employee')
-    const { db } = getRuntime()
-    const conversation = getActiveConversation(db, user.id)
+    const { db } = await getRuntime()
+    const conversation = await getActiveConversation(db, user.id)
     return json({
       conversation: {
         id: conversation.id,
         status: conversation.status,
         handoffReason: conversation.handoffReason,
       },
-      messages: listMessages(db, conversation.id),
-      pendingDraft: getPendingDraft(db, conversation.id),
+      messages: await listMessages(db, conversation.id),
+      pendingDraft: await getPendingDraft(db, conversation.id),
     })
   })
 }

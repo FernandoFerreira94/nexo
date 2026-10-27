@@ -32,9 +32,9 @@ export async function* handleEmployeeMessage(
   user: SessionUser,
   text: string,
 ): AsyncGenerator<StreamEvent> {
-  const conversation = getActiveConversation(rt.db, user.id)
-  const history = toHistory(listMessages(rt.db, conversation.id))
-  addMessage(rt.db, {
+  const conversation = await getActiveConversation(rt.db, user.id)
+  const history = toHistory(await listMessages(rt.db, conversation.id))
+  await addMessage(rt.db, {
     conversationId: conversation.id,
     role: 'employee',
     authorId: user.id,
@@ -49,7 +49,7 @@ export async function* handleEmployeeMessage(
   }
 
   const limit = checkMessageLimit(
-    countEmployeeMessage(rt.db, conversation),
+    await countEmployeeMessage(rt.db, conversation),
     rt.config.messageLimit,
     rt.config.messageWarnAt,
   )
@@ -67,7 +67,7 @@ export async function* handleEmployeeMessage(
     userName: user.name,
     text,
     history,
-    pendingDraft: getPendingDraft(rt.db, conversation.id),
+    pendingDraft: await getPendingDraft(rt.db, conversation.id),
   })
 
   let step = await turn.next()
@@ -75,7 +75,7 @@ export async function* handleEmployeeMessage(
     yield step.value
     step = await turn.next()
   }
-  const messageId = persistTurn(rt, conversation, step.value)
+  const messageId = await persistTurn(rt, conversation, step.value)
 
   if (limit.status === 'warn') {
     yield {
@@ -93,13 +93,13 @@ export async function* handleQuickHandoff(
   user: SessionUser,
   reason: HandoffReason,
 ): AsyncGenerator<StreamEvent> {
-  const conversation = getActiveConversation(rt.db, user.id)
+  const conversation = await getActiveConversation(rt.db, user.id)
   if (conversation.status !== 'with_agent') {
     yield { type: 'status', status: conversation.status, reason: conversation.handoffReason }
     yield { type: 'done', messageId: null }
     return
   }
-  const history = toHistory(listMessages(rt.db, conversation.id))
+  const history = toHistory(await listMessages(rt.db, conversation.id))
   const lastEmployeeText = [...history].reverse().find((m) => m.role === 'user')?.content ?? ''
   yield* transfer(rt, conversation, user, reason, lastEmployeeText, history)
 }
@@ -112,7 +112,7 @@ async function* transfer(
   lastText: string,
   history: HistoryMessage[],
 ): AsyncGenerator<StreamEvent> {
-  const current = getConversation(rt.db, conversation.id)
+  const current = await getConversation(rt.db, conversation.id)
   const summary = buildHandoffSummary({
     userName: user.name,
     reason,
@@ -120,9 +120,9 @@ async function* transfer(
     history,
     ticketIds: current.overdueTicketIds,
   })
-  handOff(rt.db, conversation.id, reason, summary)
+  await handOff(rt.db, conversation.id, reason, summary)
   const text = HANDOFF_REPLIES[reason]
-  const message = addMessage(rt.db, {
+  const message = await addMessage(rt.db, {
     conversationId: conversation.id,
     role: 'agent',
     content: text,
@@ -132,16 +132,20 @@ async function* transfer(
   yield { type: 'done', messageId: message.id }
 }
 
-function persistTurn(rt: Runtime, conversation: Conversation, result: TurnResult): string {
-  if (result.draft) saveDraft(rt.db, conversation.id, result.draft)
+async function persistTurn(
+  rt: Runtime,
+  conversation: Conversation,
+  result: TurnResult,
+): Promise<string> {
+  if (result.draft) await saveDraft(rt.db, conversation.id, result.draft)
   const overdue = result.cards.flatMap((card) =>
     card.type === 'tickets' ? card.tickets.filter((t) => t.overdue).map((t) => t.id) : [],
   )
-  if (overdue.length > 0) noteOverdueTickets(rt.db, conversation, overdue)
+  if (overdue.length > 0) await noteOverdueTickets(rt.db, conversation, overdue)
   if (result.handoff) {
-    handOff(rt.db, conversation.id, result.handoff.reason, result.handoff.summary)
+    await handOff(rt.db, conversation.id, result.handoff.reason, result.handoff.summary)
   }
-  const message = addMessage(rt.db, {
+  const message = await addMessage(rt.db, {
     conversationId: conversation.id,
     role: 'agent',
     content: result.text,

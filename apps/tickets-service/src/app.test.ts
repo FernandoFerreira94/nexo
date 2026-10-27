@@ -8,9 +8,9 @@ import { seedTickets } from './db/seed'
 const TOKEN = 'test-token'
 const NOW = new Date('2026-10-27T15:00:00Z') // terça, 12h em São Paulo
 
-function setup(failureRate = 0, random = () => 1) {
-  const db = openTicketsDb(':memory:')
-  seedTickets(db, NOW)
+async function setup(failureRate = 0, random = () => 1) {
+  const db = await openTicketsDb(':memory:')
+  await seedTickets(db, NOW)
   const chaos = createChaos(failureRate, random)
   const app = createApp({ db, chaos, serviceToken: TOKEN, now: () => NOW })
   const call = (path: string, init: RequestInit = {}) =>
@@ -32,9 +32,9 @@ const newTicket = {
 }
 
 describe('tickets-service', () => {
-  let ctx: ReturnType<typeof setup>
-  beforeEach(() => {
-    ctx = setup()
+  let ctx: Awaited<ReturnType<typeof setup>>
+  beforeEach(async () => {
+    ctx = await setup()
   })
 
   it('exige o token de serviço', async () => {
@@ -134,19 +134,19 @@ describe('tickets-service', () => {
 
 describe('indisponibilidade simulada', () => {
   it('com taxa de falha 100% responde 503', async () => {
-    const { call } = setup(1, () => 0)
+    const { call } = await setup(1, () => 0)
     const res = await call('/tickets?requesterId=u_ana')
     expect(res.status).toBe(503)
   })
 
   it('POST /__chaos derruba o serviço por alguns segundos', async () => {
-    const { call } = setup()
+    const { call } = await setup()
     await call('/__chaos', { method: 'POST', body: JSON.stringify({ downForSeconds: 5 }) })
     expect((await call('/tickets?requesterId=u_ana')).status).toBe(503)
   })
 
   it('/health não sofre o caos', async () => {
-    const { app } = setup(1, () => 0)
+    const { app } = await setup(1, () => 0)
     expect((await app.request('/health')).status).toBe(200)
   })
 })

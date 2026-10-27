@@ -59,24 +59,24 @@ export function createApp({ db, chaos, serviceToken, now = () => new Date() }: A
   app.use('/tickets/*', chaos.middleware)
   app.use('/tickets', chaos.middleware)
 
-  app.get('/tickets', (c) => {
+  app.get('/tickets', async (c) => {
     const query = RequesterQuery.safeParse(c.req.query())
     if (!query.success) return invalid(c, query.error)
-    return c.json(listTickets(db, query.data.requesterId))
+    return c.json(await listTickets(db, query.data.requesterId))
   })
 
-  app.get('/tickets/:id', (c) => {
+  app.get('/tickets/:id', async (c) => {
     const query = RequesterQuery.safeParse(c.req.query())
     if (!query.success) return invalid(c, query.error)
-    return c.json(getTicket(db, c.req.param('id'), query.data.requesterId))
+    return c.json(await getTicket(db, c.req.param('id'), query.data.requesterId))
   })
 
   app.post('/tickets', async (c) => {
     const body = CreateTicketInput.safeParse(await c.req.json().catch(() => null))
     if (!body.success) return invalid(c, body.error)
-    const result = withIdempotency(db, c.req.header('idempotency-key'), () => ({
+    const result = await withIdempotency(db, c.req.header('idempotency-key'), async () => ({
       statusCode: 201,
-      body: createTicket(db, body.data, now()),
+      body: await createTicket(db, body.data, now()),
     }))
     return c.json(result.body, result.statusCode as 201)
   })
@@ -86,12 +86,12 @@ export function createApp({ db, chaos, serviceToken, now = () => new Date() }: A
     if (!body.success) return invalid(c, body.error)
     const id = c.req.param('id')
     const input = body.data
-    const result = withIdempotency(db, c.req.header('idempotency-key'), () => ({
+    const result = await withIdempotency(db, c.req.header('idempotency-key'), async () => ({
       statusCode: 200,
       body:
         input.action === 'comment'
-          ? addComment(db, id, input.requesterId, input.body, now())
-          : reopenTicket(db, id, input.requesterId, input.reason, now()),
+          ? await addComment(db, id, input.requesterId, input.body, now())
+          : await reopenTicket(db, id, input.requesterId, input.reason, now()),
     }))
     return c.json(result.body, result.statusCode as 200)
   })
@@ -100,9 +100,9 @@ export function createApp({ db, chaos, serviceToken, now = () => new Date() }: A
     const body = TransferBody.safeParse(await c.req.json().catch(() => null))
     if (!body.success) return invalid(c, body.error)
     const { requesterId, summary } = body.data
-    const result = withIdempotency(db, c.req.header('idempotency-key'), () => ({
+    const result = await withIdempotency(db, c.req.header('idempotency-key'), async () => ({
       statusCode: 200,
-      body: transferTicket(db, c.req.param('id'), requesterId, summary, now()),
+      body: await transferTicket(db, c.req.param('id'), requesterId, summary, now()),
     }))
     return c.json(result.body, result.statusCode as 200)
   })

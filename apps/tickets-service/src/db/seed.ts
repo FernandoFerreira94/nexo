@@ -136,9 +136,9 @@ const SEED_TICKETS: SeedTicket[] = [
   },
 ]
 
-export function seedTickets(db: TicketsDb, now: Date = new Date()): number {
-  db.delete(tickets).run()
-  db.delete(idempotencyKeys).run()
+export async function seedTickets(db: TicketsDb, now: Date = new Date()): Promise<number> {
+  await db.delete(tickets).run()
+  await db.delete(idempotencyKeys).run()
 
   for (const seed of SEED_TICKETS) {
     const { openedAgoMs, slaStartedAgoMs, resolvedAgoMs, ...ticket } = seed
@@ -147,7 +147,8 @@ export function seedTickets(db: TicketsDb, now: Date = new Date()): number {
     const resolvedAt = resolvedAgoMs === undefined ? null : new Date(now.getTime() - resolvedAgoMs)
     const updatedAt = resolvedAt ?? slaStartAt
 
-    db.insert(tickets)
+    await db
+      .insert(tickets)
       .values({
         ...ticket,
         number: Number(ticket.id.split('-')[1]),

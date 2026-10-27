@@ -11,6 +11,7 @@ import { handleEmployeeMessage, handleQuickHandoff } from './chat'
 import {
   analystReply,
   assume,
+  ConflictError,
   ForbiddenError,
   getActiveConversation,
   getOwnConversation,
@@ -25,12 +26,12 @@ import type { Runtime } from './runtime'
 
 const ana = { id: 'u_ana', name: 'Ana Souza' }
 
-function setup(env: Record<string, string> = {}, dbPath = ':memory:') {
-  const service = createInMemoryTicketsService(new Date())
+async function setup(env: Record<string, string> = {}, dbPath = ':memory:') {
+  const service = await createInMemoryTicketsService(new Date())
   const config = loadAgentConfig({ LLM_PROVIDER: 'mock', ...env })
   const model = createChatModel(config)
   const rt: Runtime = {
-    db: openAppDb(dbPath),
+    db: await openAppDb(dbPath),
     config,
     model,
     decision: createMockDecisionEngine(),
@@ -53,28 +54,24 @@ async function collect(events: AsyncGenerator<StreamEvent>) {
 
 describe('fluxo do chat', () => {
   it('salva a pergunta, a resposta e o trace de cada resposta do agent', async () => {
-    const { rt } = setup()
+    const { rt } = await setup()
     const events = await collect(handleEmployeeMessage(rt, ana, 'Como está o meu chamado?'))
     expect(events.some((e) => e.type === 'trace')).toBe(true)
 
-    const conversation = getActiveConversation(rt.db, ana.id)
-    const messages = listMessages(rt.db, conversation.id)
+    const conversation = await getActiveConversation(rt.db, ana.id)
+    const messages = await listMessages(rt.db, conversation.id)
     expect(messages.map((m) => m.role)).toEqual(['employee', 'agent'])
     expect(messages[1]?.trace?.understood.intent).toBe('ticket_status')
     expect(conversation.overdueTicketIds).toContain('INC-20311')
   })
 
   it('rascunho só vira chamado no Confirmar, e confirmar duas vezes não duplica', async () => {
-    const { rt } = setup()
+    const { rt } = await setup()
     await collect(
       handleEmployeeMessage(rt, ana, 'A VPN dá erro 809 e não consigo trabalhar. Uso Windows 11.'),
     )
     const before = await rt.tickets.listTickets(ana.id)
-    const draftCard = listMessages(rt.db, getActiveConversation(rt.db, ana.id).id)
-      .flatMap((m) => m.cards)
-      .find((c) => c.type === 'draft')
-    if (draftCard?.type !== 'draft') throw new Error('sem rascunho')
-    const { draft } = draftCard
+    const { draft } = await findDraft(rt)
 
     const message = await confirmDraft(rt, ana.id, draft.id, draft.version)
     expect(message.content).toMatch(/INC-\d+/)
@@ -83,60 +80,76 @@ describe('fluxo do chat', () => {
   })
 
   it('outro funcionário não confirma nem cancela o rascunho da Ana', async () => {
-    const { rt } = setup()
+    const { rt } = await setup()
     await collect(
       handleEmployeeMessage(rt, ana, 'A VPN dá erro 809 e não consigo trabalhar. Uso Windows 11.'),
     )
-    const draftCard = listMessages(rt.db, getActiveConversation(rt.db, ana.id).id)
-      .flatMap((m) => m.cards)
-      .find((c) => c.type === 'draft')
-    if (draftCard?.type !== 'draft') throw new Error('sem rascunho')
-    await expect(confirmDraft(rt, 'u_bruno', draftCard.draft.id, 1)).rejects.toBeInstanceOf(
-      NotFoundError,
-    )
-    expect(() => cancelDraft(rt, 'u_bruno', draftCard.draft.id, 1)).toThrow(NotFoundError)
+    const { draft } = await findDraft(rt)
+    await expect(confirmDraft(rt, 'u_bruno', draft.id, 1)).rejects.toBeInstanceOf(NotFoundError)
+    await expect(cancelDraft(rt, 'u_bruno', draft.id, 1)).rejects.toBeInstanceOf(NotFoundError)
   })
 
-  it('conversa de outra pessoa responde 404', () => {
-    const { rt } = setup()
-    const conversation = getActiveConversation(rt.db, ana.id)
-    expect(() => getOwnConversation(rt.db, conversation.id, 'u_bruno')).toThrow(NotFoundError)
+  it('conversa de outra pessoa responde 404', async () => {
+    const { rt } = await setup()
+    const conversation = await getActiveConversation(rt.db, ana.id)
+    await expect(getOwnConversation(rt.db, conversation.id, 'u_bruno')).rejects.toBeInstanceOf(
+      NotFoundError,
+    )
   })
 
   it('com analista, o agent não responde; devolver reativa o agent', async () => {
-    const { rt } = setup()
+    const { rt } = await setup()
     await collect(handleEmployeeMessage(rt, ana, 'Quero falar com um analista'))
-    const conversation = getActiveConversation(rt.db, ana.id)
+    const conversation = await getActiveConversation(rt.db, ana.id)
     expect(conversation.status).toBe('waiting_analyst')
-    expect(listQueue(rt.db)[0]?.handoffSummary).toContain('Pedido do funcionário')
+    expect((await listQueue(rt.db))[0]?.handoffSummary).toContain('Pedido do funcionário')
 
-    assume(rt.db, conversation.id, 'u_marcos')
+    await assume(rt.db, conversation.id, 'u_marcos')
     const events = await collect(handleEmployeeMessage(rt, ana, 'Oi, alguém aí?'))
     expect(events.some((e) => e.type === 'text-delta')).toBe(false)
 
-    expect(() => analystReply(rt.db, conversation.id, 'u_patricia', 'oi')).toThrow(ForbiddenError)
-    analystReply(rt.db, conversation.id, 'u_marcos', 'Oi Ana, estou vendo aqui.')
-    returnToAgent(rt.db, conversation.id, 'u_marcos')
+    await expect(analystReply(rt.db, conversation.id, 'u_patricia', 'oi')).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    await analystReply(rt.db, conversation.id, 'u_marcos', 'Oi Ana, estou vendo aqui.')
+    await returnToAgent(rt.db, conversation.id, 'u_marcos')
 
     const after = await collect(handleEmployeeMessage(rt, ana, 'Oi'))
     expect(after.some((e) => e.type === 'text-delta')).toBe(true)
   })
 
+  it('dois analistas assumindo ao mesmo tempo: só um fica com a conversa', async () => {
+    const { rt } = await setup()
+    await collect(handleEmployeeMessage(rt, ana, 'Quero falar com um analista'))
+    const conversation = await getActiveConversation(rt.db, ana.id)
+
+    const results = await Promise.allSettled([
+      assume(rt.db, conversation.id, 'u_marcos'),
+      assume(rt.db, conversation.id, 'u_patricia'),
+    ])
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    expect(results.find((r) => r.status === 'rejected')?.reason).toBeInstanceOf(ConflictError)
+    const joined = (await listMessages(rt.db, conversation.id)).filter((m) =>
+      m.content.includes('entrou na conversa'),
+    )
+    expect(joined).toHaveLength(1)
+  })
+
   it('botão de vencido transfere com o chamado no resumo', async () => {
-    const { rt } = setup()
+    const { rt } = await setup()
     await collect(handleEmployeeMessage(rt, ana, 'Qual o status do INC-20311?'))
     await collect(handleQuickHandoff(rt, ana, 'overdue'))
-    const [item] = listQueue(rt.db)
+    const [item] = await listQueue(rt.db)
     expect(item?.handoffReason).toBe('overdue')
     expect(item?.handoffSummary).toContain('INC-20311')
   })
 
   it('no limite de mensagens transfere sem chamar o agent', async () => {
-    const { rt } = setup({ SESSION_MESSAGE_LIMIT: '2', SESSION_MESSAGE_WARN_AT: '1' })
+    const { rt } = await setup({ SESSION_MESSAGE_LIMIT: '2', SESSION_MESSAGE_WARN_AT: '1' })
     const first = await collect(handleEmployeeMessage(rt, ana, 'Oi'))
     expect(first.some((e) => e.type === 'notice')).toBe(true)
     await collect(handleEmployeeMessage(rt, ana, 'Oi de novo'))
-    expect(getActiveConversation(rt.db, ana.id).handoffReason).toBe('message_limit')
+    expect((await getActiveConversation(rt.db, ana.id)).handoffReason).toBe('message_limit')
   })
 
   it('conversa, estado e traces sobrevivem a reiniciar o processo', async () => {
@@ -144,12 +157,23 @@ describe('fluxo do chat', () => {
       fs.mkdtempSync(`${(process.env.TMPDIR ?? '/tmp').replace(/\/$/, '')}/nexo-`),
     )
     const path = `${dir}/app.db`
-    const first = setup({}, path)
+    const first = await setup({}, path)
     await collect(handleEmployeeMessage(first.rt, ana, 'Quero falar com um analista'))
 
-    const second = setup({}, path) // "reinício": novo processo abrindo o mesmo arquivo
-    const conversation = getActiveConversation(second.rt.db, ana.id)
+    const second = await setup({}, path) // "reinício": novo processo abrindo o mesmo arquivo
+    const conversation = await getActiveConversation(second.rt.db, ana.id)
     expect(conversation.status).toBe('waiting_analyst')
-    expect(listMessages(second.rt.db, conversation.id).at(-1)?.trace?.handoff).toBe('requested')
+    expect((await listMessages(second.rt.db, conversation.id)).at(-1)?.trace?.handoff).toBe(
+      'requested',
+    )
   })
 })
+
+async function findDraft(rt: Runtime) {
+  const conversation = await getActiveConversation(rt.db, ana.id)
+  const card = (await listMessages(rt.db, conversation.id))
+    .flatMap((m) => m.cards)
+    .find((c) => c.type === 'draft')
+  if (card?.type !== 'draft') throw new Error('sem rascunho')
+  return card
+}

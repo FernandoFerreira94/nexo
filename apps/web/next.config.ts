@@ -8,9 +8,9 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv)
 
 const nextConfig: NextConfig = {
   // Pacotes do monorepo são TypeScript puro: o Next compila junto.
-  transpilePackages: ['@nexo/agent', '@nexo/shared'],
-  // Driver nativo do SQLite fica fora do bundle.
-  serverExternalPackages: ['better-sqlite3'],
+  transpilePackages: ['@nexo/agent', '@nexo/shared', '@nexo/tickets-service'],
+  // Driver do SQLite/Turso tem binário nativo: fica fora do bundle.
+  serverExternalPackages: ['@libsql/client', 'libsql'],
   agentRules: false,
 }
 

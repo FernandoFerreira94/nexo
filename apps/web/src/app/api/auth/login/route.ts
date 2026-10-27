@@ -15,8 +15,8 @@ const Body = z.object({ email: z.email() })
 export async function POST(request: Request) {
   return handle(async () => {
     const { email } = Body.parse(await request.json())
-    const rt = getRuntime()
-    const user = rt.db.select().from(users).where(eq(users.email, email.toLowerCase())).get()
+    const rt = await getRuntime()
+    const user = await rt.db.select().from(users).where(eq(users.email, email.toLowerCase())).get()
     if (!user) return json({ error: 'Usuário não encontrado.' }, 401)
 
     const cookieStore = await cookies()

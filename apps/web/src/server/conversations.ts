@@ -27,8 +27,8 @@ export class ConflictError extends Error {}
 const nowIso = () => new Date().toISOString()
 
 /** Retoma a última conversa não encerrada ou abre uma nova (decisão D13). */
-export function getActiveConversation(db: AppDb, userId: string): Conversation {
-  const existing = db
+export async function getActiveConversation(db: AppDb, userId: string): Promise<Conversation> {
+  const existing = await db
     .select()
     .from(conversations)
     .where(and(eq(conversations.userId, userId), ne(conversations.status, 'closed')))
@@ -49,41 +49,46 @@ export function getActiveConversation(db: AppDb, userId: string): Conversation {
     createdAt: nowIso(),
     updatedAt: nowIso(),
   }
-  db.insert(conversations).values(created).run()
+  await db.insert(conversations).values(created).run()
   return created
 }
 
-export function getConversation(db: AppDb, id: string): Conversation {
-  const conversation = db.select().from(conversations).where(eq(conversations.id, id)).get()
+export async function getConversation(db: AppDb, id: string): Promise<Conversation> {
+  const conversation = await db.select().from(conversations).where(eq(conversations.id, id)).get()
   if (!conversation) throw new NotFoundError('Conversa não encontrada.')
   return conversation
 }
 
 /** Funcionário só enxerga a própria conversa; quem não é dono recebe 404 (decisão D11). */
-export function getOwnConversation(db: AppDb, id: string, userId: string): Conversation {
-  const conversation = getConversation(db, id)
+export async function getOwnConversation(
+  db: AppDb,
+  id: string,
+  userId: string,
+): Promise<Conversation> {
+  const conversation = await getConversation(db, id)
   if (conversation.userId !== userId) throw new NotFoundError('Conversa não encontrada.')
   return conversation
 }
 
 /** Mensagens com o trace e com os cartões de rascunho no estado atual (enviado, descartado). */
-export function listMessages(db: AppDb, conversationId: string): MessageWithTrace[] {
-  const draftStatus = new Map(
-    db
-      .select()
-      .from(drafts)
-      .where(eq(drafts.conversationId, conversationId))
-      .all()
-      .map((row) => [row.id, row.data] as const),
-  )
-  return db
+export async function listMessages(
+  db: AppDb,
+  conversationId: string,
+): Promise<MessageWithTrace[]> {
+  const draftRows = await db
+    .select()
+    .from(drafts)
+    .where(eq(drafts.conversationId, conversationId))
+    .all()
+  const draftStatus = new Map(draftRows.map((row) => [row.id, row.data] as const))
+  const rows = await db
     .select({ message: messages, trace: decisionTraces.data })
     .from(messages)
     .leftJoin(decisionTraces, eq(decisionTraces.id, messages.traceId))
     .where(eq(messages.conversationId, conversationId))
     .orderBy(asc(messages.createdAt), sql`messages.rowid`)
     .all()
-    .map(({ message, trace }) => ({
+  return rows.map(({ message, trace }) => ({
       ...message,
       trace,
       cards: message.cards.map((card): Card => {
@@ -94,7 +99,7 @@ export function listMessages(db: AppDb, conversationId: string): MessageWithTrac
     }))
 }
 
-export function addMessage(
+export async function addMessage(
   db: AppDb,
   input: {
     conversationId: string
@@ -105,11 +110,12 @@ export function addMessage(
     quickReplies?: QuickReply[]
     trace?: DecisionTrace | null
   },
-): Message {
+): Promise<Message> {
   let traceId: string | null = null
   if (input.trace) {
     traceId = randomUUID()
-    db.insert(decisionTraces)
+    await db
+      .insert(decisionTraces)
       .values({
         id: traceId,
         conversationId: input.conversationId,
@@ -129,39 +135,43 @@ export function addMessage(
     traceId,
     createdAt: nowIso(),
   }
-  db.insert(messages).values(message).run()
-  touch(db, input.conversationId)
+  await db.insert(messages).values(message).run()
+  await touch(db, input.conversationId)
   return message
 }
 
-export function countEmployeeMessage(db: AppDb, conversation: Conversation): number {
-  const count = conversation.employeeMessageCount + 1
-  db.update(conversations)
-    .set({ employeeMessageCount: count })
+/** Soma no banco (não no objeto em memória) para dois envios simultâneos não perderem a conta. */
+export async function countEmployeeMessage(db: AppDb, conversation: Conversation): Promise<number> {
+  const row = await db
+    .update(conversations)
+    .set({ employeeMessageCount: sql`${conversations.employeeMessageCount} + 1` })
     .where(eq(conversations.id, conversation.id))
-    .run()
-  return count
+    .returning({ count: conversations.employeeMessageCount })
+    .get()
+  return row?.count ?? conversation.employeeMessageCount + 1
 }
 
-export function noteOverdueTickets(db: AppDb, conversation: Conversation, ids: string[]) {
+export async function noteOverdueTickets(db: AppDb, conversation: Conversation, ids: string[]) {
   const merged = [...new Set([...conversation.overdueTicketIds, ...ids])]
   if (merged.length === conversation.overdueTicketIds.length) return
-  db.update(conversations)
+  await db
+    .update(conversations)
     .set({ overdueTicketIds: merged })
     .where(eq(conversations.id, conversation.id))
     .run()
 }
 
 /** Transfere para a fila dos analistas, com motivo e resumo. Repetir não duplica. */
-export function handOff(
+export async function handOff(
   db: AppDb,
   conversationId: string,
   reason: HandoffReason,
   summary: string,
-): Conversation {
-  const conversation = getConversation(db, conversationId)
+): Promise<Conversation> {
+  const conversation = await getConversation(db, conversationId)
   if (conversation.status !== 'with_agent') return conversation
-  db.update(conversations)
+  await db
+    .update(conversations)
     .set({
       status: 'waiting_analyst',
       handoffReason: reason,
@@ -182,8 +192,8 @@ const REASON_WEIGHT: Record<HandoffReason, number> = {
   message_limit: 3,
 }
 
-export function listQueue(db: AppDb) {
-  const rows = db
+export async function listQueue(db: AppDb) {
+  const rows = await db
     .select({ conversation: conversations, user: users })
     .from(conversations)
     .innerJoin(users, eq(users.id, conversations.userId))
@@ -201,17 +211,31 @@ export function listQueue(db: AppDb) {
     })
 }
 
-export function assume(db: AppDb, conversationId: string, analystId: string): Conversation {
-  const conversation = getConversation(db, conversationId)
-  if (conversation.status === 'with_analyst' && conversation.assignedAnalystId !== analystId) {
+export async function assume(
+  db: AppDb,
+  conversationId: string,
+  analystId: string,
+): Promise<Conversation> {
+  const conversation = await getConversation(db, conversationId)
+  if (conversation.status === 'with_analyst' && conversation.assignedAnalystId === analystId) {
+    return conversation
+  }
+  if (conversation.status === 'with_analyst') {
     throw new ConflictError('Outro analista já assumiu esta conversa.')
   }
-  if (conversation.status !== 'waiting_analyst' && conversation.status !== 'with_analyst') {
+  if (conversation.status !== 'waiting_analyst') {
     throw new ConflictError('Esta conversa não está na fila.')
   }
-  setStatus(db, conversationId, 'with_analyst', analystId)
-  const analyst = db.select().from(users).where(eq(users.id, analystId)).get()
-  addMessage(db, {
+  // Update condicional: se dois analistas clicam juntos, só um muda a linha.
+  const claimed = await db
+    .update(conversations)
+    .set({ status: 'with_analyst', assignedAnalystId: analystId, updatedAt: nowIso() })
+    .where(and(eq(conversations.id, conversationId), eq(conversations.status, 'waiting_analyst')))
+    .returning({ id: conversations.id })
+    .all()
+  if (claimed.length === 0) throw new ConflictError('Outro analista já assumiu esta conversa.')
+  const analyst = await db.select().from(users).where(eq(users.id, analystId)).get()
+  await addMessage(db, {
     conversationId,
     role: 'system',
     content: `${analyst?.name ?? 'Um analista'} entrou na conversa.`,
@@ -219,36 +243,49 @@ export function assume(db: AppDb, conversationId: string, analystId: string): Co
   return getConversation(db, conversationId)
 }
 
-export function analystReply(db: AppDb, conversationId: string, analystId: string, text: string) {
-  requireAssigned(db, conversationId, analystId)
+export async function analystReply(
+  db: AppDb,
+  conversationId: string,
+  analystId: string,
+  text: string,
+) {
+  await requireAssigned(db, conversationId, analystId)
   return addMessage(db, { conversationId, role: 'analyst', authorId: analystId, content: text })
 }
 
 /** Devolve ao assistente: o funcionário volta a falar com o agent na mesma conversa. */
-export function returnToAgent(db: AppDb, conversationId: string, analystId: string) {
-  requireAssigned(db, conversationId, analystId)
-  setStatus(db, conversationId, 'with_agent', null)
-  db.update(conversations)
-    .set({ handoffReason: null, handoffSummary: null, handoffAt: null })
+export async function returnToAgent(db: AppDb, conversationId: string, analystId: string) {
+  await requireAssigned(db, conversationId, analystId)
+  await db
+    .update(conversations)
+    .set({
+      status: 'with_agent',
+      assignedAnalystId: null,
+      handoffReason: null,
+      handoffSummary: null,
+      handoffAt: null,
+      updatedAt: nowIso(),
+    })
     .where(eq(conversations.id, conversationId))
     .run()
-  addMessage(db, {
+  await addMessage(db, {
     conversationId,
     role: 'system',
     content: 'O analista devolveu a conversa para o assistente.',
   })
 }
 
-export function closeConversation(db: AppDb, conversationId: string, analystId: string) {
-  requireAssigned(db, conversationId, analystId)
-  setStatus(db, conversationId, 'closed', analystId)
-  addMessage(db, { conversationId, role: 'system', content: 'Atendimento encerrado.' })
+export async function closeConversation(db: AppDb, conversationId: string, analystId: string) {
+  await requireAssigned(db, conversationId, analystId)
+  await setStatus(db, conversationId, 'closed', analystId)
+  await addMessage(db, { conversationId, role: 'system', content: 'Atendimento encerrado.' })
 }
 
 // Rascunhos ---------------------------------------------------------------
 
-export function saveDraft(db: AppDb, conversationId: string, draft: Draft) {
-  db.insert(drafts)
+export async function saveDraft(db: AppDb, conversationId: string, draft: Draft) {
+  await db
+    .insert(drafts)
     .values({
       id: draft.id,
       conversationId,
@@ -260,8 +297,8 @@ export function saveDraft(db: AppDb, conversationId: string, draft: Draft) {
     .run()
 }
 
-export function getPendingDraft(db: AppDb, conversationId: string): Draft | null {
-  const rows = db
+export async function getPendingDraft(db: AppDb, conversationId: string): Promise<Draft | null> {
+  const rows = await db
     .select()
     .from(drafts)
     .where(eq(drafts.conversationId, conversationId))
@@ -271,15 +308,15 @@ export function getPendingDraft(db: AppDb, conversationId: string): Draft | null
 }
 
 /** Rascunho do próprio funcionário, pendente e na versão que ele viu na tela. */
-export function getDraftForConfirmation(
+export async function getDraftForConfirmation(
   db: AppDb,
   draftId: string,
   userId: string,
   version: number,
-): { draft: Draft; conversation: Conversation } {
-  const row = db.select().from(drafts).where(eq(drafts.id, draftId)).get()
+): Promise<{ draft: Draft; conversation: Conversation }> {
+  const row = await db.select().from(drafts).where(eq(drafts.id, draftId)).get()
   if (!row) throw new NotFoundError('Rascunho não encontrado.')
-  const conversation = getOwnConversation(db, row.conversationId, userId)
+  const conversation = await getOwnConversation(db, row.conversationId, userId)
   if (row.data.status !== 'pending') throw new ConflictError('Este rascunho já foi usado.')
   if (row.data.version !== version) {
     throw new ConflictError('O rascunho mudou. Confira a versão mais recente.')
@@ -287,13 +324,14 @@ export function getDraftForConfirmation(
   return { draft: row.data, conversation }
 }
 
-export function finishDraft(
+export async function finishDraft(
   db: AppDb,
   draft: Draft,
   status: 'submitted' | 'cancelled',
   resultTicketId: string | null = null,
 ) {
-  db.update(drafts)
+  await db
+    .update(drafts)
     .set({ data: { ...draft, status }, resultTicketId, updatedAt: nowIso() })
     .where(eq(drafts.id, draft.id))
     .run()
@@ -301,28 +339,30 @@ export function finishDraft(
 
 // Internos ----------------------------------------------------------------
 
-function requireAssigned(db: AppDb, conversationId: string, analystId: string) {
-  const conversation = getConversation(db, conversationId)
+async function requireAssigned(db: AppDb, conversationId: string, analystId: string) {
+  const conversation = await getConversation(db, conversationId)
   if (conversation.status !== 'with_analyst' || conversation.assignedAnalystId !== analystId) {
     throw new ForbiddenError('Assuma a conversa antes de responder.')
   }
   return conversation
 }
 
-function setStatus(
+async function setStatus(
   db: AppDb,
   conversationId: string,
   status: ConversationStatus,
   analystId: string | null,
 ) {
-  db.update(conversations)
+  await db
+    .update(conversations)
     .set({ status, assignedAnalystId: analystId, updatedAt: nowIso() })
     .where(eq(conversations.id, conversationId))
     .run()
 }
 
-function touch(db: AppDb, conversationId: string) {
-  db.update(conversations)
+async function touch(db: AppDb, conversationId: string) {
+  await db
+    .update(conversations)
     .set({ updatedAt: nowIso() })
     .where(eq(conversations.id, conversationId))
     .run()

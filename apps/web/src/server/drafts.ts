@@ -20,10 +20,10 @@ export async function confirmDraft(
   draftId: string,
   version: number,
 ): Promise<Message> {
-  const { draft, conversation } = getDraftForConfirmation(rt.db, draftId, userId, version)
+  const { draft, conversation } = await getDraftForConfirmation(rt.db, draftId, userId, version)
   const idempotencyKey = `${draft.id}:${draft.version}`
   const ticket = await submit(rt, userId, draft, idempotencyKey)
-  finishDraft(rt.db, draft, 'submitted', ticket.id)
+  await finishDraft(rt.db, draft, 'submitted', ticket.id)
 
   return addMessage(rt.db, {
     conversationId: conversation.id,
@@ -33,9 +33,9 @@ export async function confirmDraft(
   })
 }
 
-export function cancelDraft(rt: Runtime, userId: string, draftId: string, version: number) {
-  const { draft, conversation } = getDraftForConfirmation(rt.db, draftId, userId, version)
-  finishDraft(rt.db, draft, 'cancelled')
+export async function cancelDraft(rt: Runtime, userId: string, draftId: string, version: number) {
+  const { draft, conversation } = await getDraftForConfirmation(rt.db, draftId, userId, version)
+  await finishDraft(rt.db, draft, 'cancelled')
   return addMessage(rt.db, {
     conversationId: conversation.id,
     role: 'agent',

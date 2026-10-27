@@ -13,6 +13,6 @@ export async function POST(
     const analyst = await requireUser('analyst')
     const { id } = await ctx.params
     const { text } = Body.parse(await request.json())
-    return json({ message: analystReply(getRuntime().db, id, analyst.id, text) })
+    return json({ message: await analystReply((await getRuntime()).db, id, analyst.id, text) })
   })
 }

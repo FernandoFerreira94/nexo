@@ -7,7 +7,7 @@ const port = Number(process.env.TICKETS_SERVICE_PORT ?? 4010)
 const serviceToken = process.env.TICKETS_SERVICE_TOKEN
 if (!serviceToken) throw new Error('TICKETS_SERVICE_TOKEN não definido (veja .env.example).')
 
-const db = openTicketsDb(process.env.TICKETS_DB_PATH ?? DEFAULT_DB_PATH)
+const db = await openTicketsDb(process.env.TICKETS_DB_PATH ?? DEFAULT_DB_PATH)
 const chaos = createChaos(Number(process.env.TICKETS_FAILURE_RATE ?? 0))
 const app = createApp({ db, chaos, serviceToken })
 

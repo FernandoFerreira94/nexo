@@ -15,11 +15,11 @@ export type User = typeof users.$inferSelect
 
 /** Usuário da sessão (cookie assinado). É daqui que sai o requesterId, sempre. */
 export async function getSessionUser(): Promise<User | null> {
-  const rt = getRuntime()
+  const rt = await getRuntime()
   const token = (await cookies()).get(SESSION_COOKIE)?.value
   const session = verifySession(token, rt.authSecret)
   if (!session) return null
-  return rt.db.select().from(users).where(eq(users.id, session.userId)).get() ?? null
+  return (await rt.db.select().from(users).where(eq(users.id, session.userId)).get()) ?? null
 }
 
 export async function requireUser(role: User['role']): Promise<User> {

@@ -12,6 +12,6 @@ export async function POST(request: Request) {
   return handle(async () => {
     await requireUser('analyst')
     const body = Body.parse(await request.json())
-    return json(await getRuntime().tickets.setChaos(body))
+    return json(await (await getRuntime()).tickets.setChaos(body))
   })
 }

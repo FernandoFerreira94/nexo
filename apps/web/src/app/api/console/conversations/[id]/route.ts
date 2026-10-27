@@ -10,10 +10,10 @@ import { getRuntime } from '@/server/runtime'
 export async function GET(_request: Request, ctx: RouteContext<'/api/console/conversations/[id]'>) {
   return handle(async () => {
     await requireUser('analyst')
-    const rt = getRuntime()
+    const rt = await getRuntime()
     const { id } = await ctx.params
-    const conversation = getConversation(rt.db, id)
-    const employee = rt.db.select().from(users).where(eq(users.id, conversation.userId)).get()
+    const conversation = await getConversation(rt.db, id)
+    const employee = await rt.db.select().from(users).where(eq(users.id, conversation.userId)).get()
     let tickets: TicketSummary[] | null
     try {
       const now = new Date()
@@ -22,6 +22,6 @@ export async function GET(_request: Request, ctx: RouteContext<'/api/console/con
     } catch {
       tickets = null // sistema de chamados fora: o painel mostra o aviso e o resto funciona
     }
-    return json({ conversation, employee, messages: listMessages(rt.db, id), tickets })
+    return json({ conversation, employee, messages: await listMessages(rt.db, id), tickets })
   })
 }
