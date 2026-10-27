@@ -402,3 +402,18 @@ Item por item do brief contra o código. Faltavam e foram feitos:
 - Testes do schema do trace (`DecisionTrace`, `StreamEvent`).
 
 Fica de fora, com motivo: prints do protótipo em `docs/prototipo/` (o arquivo do Pencil não está acessível daqui; as telas reais estão no README).
+
+## Modelo final e o que ficou de fora (27/10)
+
+**Modelo: Claude Haiku 5.5** (`anthropic/claude-haiku-5.5` na OpenRouter, US$ 0,10 entrada / 0,50 saída por 1M tokens). Decisão do Fernando.
+
+- _Por quê:_ custa ~US$ 0,009 por conversa de 10 mensagens e ~US$ 0,02 por `pnpm eval`. É confiável com tools e saída JSON em português, que é o centro do agent.
+- _Alternativas baratas:_ GPT-5 Nano (0,05 / 0,40, ~US$ 0,005 por conversa) e DeepSeek V4.1 Flash (~0,03 / 0,12, ~US$ 0,002, mas o preço varia entre fontes). GPT-4o mini (0,15 / 0,60) e GPT-4.1 mini (0,40 / 1,60) saem mais caros.
+- _Trade-off:_ a diferença é de frações de centavo; o risco de errar tool calling na avaliação pesa mais. Trocar = mudar `LLM_MODEL` e `LLM_PRICE_*` no `.env`, sem código, e rodar `pnpm eval` para conferir.
+
+Ficou de fora, de propósito:
+
+- **RAG com vetores:** 8 artigos curtos. A busca por palavras-chave acerta, é explicável e não tem custo. Com centenas de artigos, entraria.
+- **Fine-tuning:** as regras do service desk ficam em código, testadas. Treinar o modelo esconderia a regra e custaria mais para mudar ao vivo.
+- **MCP:** as tools são funções internas chamadas por um único agent. MCP serve para expor tools a clientes externos, o que o desafio não pede.
+- **NestJS (ou outro backend):** o Next.js já serve a UI e as rotas da API. O serviço de chamados separado é um Hono pequeno. Um terceiro framework só adicionaria camada.

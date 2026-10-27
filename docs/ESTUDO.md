@@ -171,3 +171,13 @@ Na Vercel ele roda no mesmo processo porque lá não há um servidor de pé; o c
 
 **Como protege o custo numa demo pública?** 20 mensagens por minuto por pessoa, 30 por conversa e um teto
 diário global contado no banco (`LLM_DAILY_TURN_LIMIT`).
+
+## 7. Perguntas sobre o modelo
+
+**Por que o Haiku 5.5 e não um modelo mais barato?** Custa menos de 1 centavo de dólar por conversa. Os mais
+baratos (GPT-5 Nano, DeepSeek) economizam frações de centavo, mas erram mais com tools e JSON. Trocar é só
+mudar `LLM_MODEL` e `LLM_PRICE_*` no `.env` e rodar `pnpm eval`.
+
+**Por que não RAG, fine-tuning, MCP ou NestJS?** Poucos artigos (palavras-chave bastam), regras em código
+(mais fácil de mudar e testar que um modelo treinado), um agent só (MCP serve para tools externas) e o
+Next.js já é o backend. Detalhes em DECISOES, "Modelo final".
