@@ -2,7 +2,6 @@ import { createClient } from '@libsql/client'
 import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import * as schema from './schema'
 
 export type TicketsDb = LibSQLDatabase<typeof schema>
@@ -25,7 +24,3 @@ export function toLibsqlUrl(url: string): string {
   mkdirSync(dirname(url), { recursive: true })
   return `file:${url}`
 }
-
-export const DEFAULT_DB_PATH = fileURLToPath(
-  new URL('../../../../data/tickets.db', import.meta.url),
-)

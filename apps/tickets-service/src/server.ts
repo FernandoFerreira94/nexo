@@ -1,7 +1,8 @@
 import { serve } from '@hono/node-server'
 import { createApp } from './app'
 import { createChaos } from './chaos'
-import { DEFAULT_DB_PATH, openTicketsDb } from './db/client'
+import { openTicketsDb } from './db/client'
+import { DEFAULT_DB_PATH } from './db/paths'
 
 const port = Number(process.env.TICKETS_SERVICE_PORT ?? 4010)
 const serviceToken = process.env.TICKETS_SERVICE_TOKEN

@@ -1,4 +1,5 @@
-import { DEFAULT_DB_PATH, openTicketsDb } from './client'
+import { openTicketsDb } from './client'
+import { DEFAULT_DB_PATH } from './paths'
 import { tickets } from './schema'
 import { seedTickets } from './seed'
 
