@@ -15,8 +15,10 @@ export type User = typeof users.$inferSelect
 
 /** Usuário da sessão (cookie assinado). É daqui que sai o requesterId, sempre. */
 export async function getSessionUser(): Promise<User | null> {
-  const rt = await getRuntime()
+  // Ler o cookie antes de tudo deixa a página dinâmica: o build não tenta abrir o banco.
   const token = (await cookies()).get(SESSION_COOKIE)?.value
+  if (!token) return null
+  const rt = await getRuntime()
   const session = verifySession(token, rt.authSecret)
   if (!session) return null
   return (await rt.db.select().from(users).where(eq(users.id, session.userId)).get()) ?? null
