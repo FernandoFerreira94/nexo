@@ -3,7 +3,7 @@
 Assistente de chat do service desk de TI da Nexo, com console para os analistas.
 O funcionário tira dúvidas, consulta e abre chamados conversando; o analista recebe as
 conversas que precisam de uma pessoa, já com o resumo, e vê como o assistente decidiu cada resposta.
-
+**Demo:** [nexo-webcodeff.vercel.app](https://nexo-webcodeff.vercel.app). Entre como **Ana Souza** (funcionária) numa aba
 **Demo:** https://nexo-webcodeff.vercel.app Entre como **Ana Souza** (funcionária) numa aba
 e como **Marcos Alves** (analista) em outra para ver o atendimento dos dois lados.
 
