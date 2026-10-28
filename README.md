@@ -174,7 +174,7 @@ nos evals antes de adotar.
 Um projeto só na Vercel. O banco fica no Turso, porque a Vercel não guarda arquivos entre execuções.
 
 1. Na Vercel: **Add New > Project**, importar este repositório e definir **Root Directory = `apps/web`**.
-2. Em **Storage** (Marketplace), adicionar o **Turso** e ligar ao projeto. Ele cria `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN`.
+2. Em **Storage** (Marketplace), criar um banco **Turso** e ligar ao projeto, sem prefixo nas variáveis. Ele cria `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN`. O app fala com o Turso só por HTTP (`@libsql/client/web`), sem binário nativo na função.
 3. Em **Environment Variables**:
 
 | Variável                    | Valor                                                                 |
@@ -192,8 +192,9 @@ Um projeto só na Vercel. O banco fica no Turso, porque a Vercel não guarda arq
 | `DEMO_RESET_HOURS`          | `24` (apaga conversas paradas, para cada visitante achar o app limpo) |
 | `TICKETS_FAILURE_RATE`      | `0.05`                                                                |
 
-4. **Deploy.** As tabelas e os dados de exemplo são criados no primeiro acesso, e a semente dos chamados é
-   refeita a cada dia para a demo não envelhecer.
+4. **Deploy** (ou **Redeploy**, se o banco foi ligado depois). Não há passo de migração: as tabelas e os dados de
+   exemplo são criados no primeiro acesso, e a semente dos chamados é refeita a cada dia para a demo não envelhecer.
+   Sem `TURSO_DATABASE_URL`, o log da Vercel diz o que falta.
 
 **Limites de uso:** 20 mensagens por minuto por pessoa, 30 por conversa, o teto diário de respostas e o teto
 de gasto de US$ 1, os dois últimos contados no banco (valem para todas as instâncias). Chaves só nas variáveis da plataforma, nunca no repositório.
