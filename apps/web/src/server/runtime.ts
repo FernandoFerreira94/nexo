@@ -40,6 +40,11 @@ export async function createRuntime(
   if (!authSecret) throw new Error('AUTH_SECRET não definido (veja o .env.example).')
 
   // Local: arquivo SQLite. Vercel: Turso (a integração da Vercel cria estas duas variáveis).
+  if (env.VERCEL && !env.TURSO_DATABASE_URL) {
+    throw new Error(
+      'TURSO_DATABASE_URL ausente: ligue o Turso ao projeto (Storage) e faça Redeploy. A Vercel não guarda arquivos.',
+    )
+  }
   const dbUrl = env.TURSO_DATABASE_URL ?? env.APP_DB_PATH ?? DEFAULT_APP_DB_PATH
   const dbToken = env.TURSO_AUTH_TOKEN
 

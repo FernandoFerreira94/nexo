@@ -1,4 +1,4 @@
-import { createClient } from '@libsql/client'
+import type { Client } from '@libsql/client'
 import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -13,7 +13,7 @@ export type TicketsDb = LibSQLDatabase<typeof schema>
  * - uma URL `libsql://` do Turso (produção na Vercel), com `authToken`.
  */
 export async function openTicketsDb(url: string, authToken?: string): Promise<TicketsDb> {
-  const client = createClient({ url: toLibsqlUrl(url), authToken })
+  const client = await connect(url, authToken)
   await client.executeMultiple(schema.CREATE_TABLES_SQL)
   return drizzle(client, { schema })
 }
@@ -23,4 +23,18 @@ export function toLibsqlUrl(url: string): string {
   if (url === ':memory:' || /^[a-z]+:/.test(url)) return url
   mkdirSync(dirname(url), { recursive: true })
   return `file:${url}`
+}
+
+/**
+ * Banco remoto (Turso: `libsql://`, `https://`) usa o cliente web, só HTTP, sem binário nativo:
+ * na Vercel não depende de o binário do libsql ir junto na função. Arquivo e `:memory:` usam o
+ * cliente Node.
+ */
+async function connect(url: string, authToken?: string): Promise<Client> {
+  if (/^(libsql|https?|wss?):/.test(url)) {
+    const { createClient } = await import('@libsql/client/web')
+    return createClient({ url, authToken })
+  }
+  const { createClient } = await import('@libsql/client')
+  return createClient({ url: toLibsqlUrl(url), authToken })
 }
