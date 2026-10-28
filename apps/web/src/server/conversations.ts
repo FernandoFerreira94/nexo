@@ -10,7 +10,7 @@ import type {
 import { and, asc, desc, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import type { AppDb } from './db/client'
-import { conversations, decisionTraces, drafts, messages, users } from './db/schema'
+import { conversations, decisionTraces, drafts, llmUsage, messages, users } from './db/schema'
 
 /**
  * Regras das conversas, sem nada de HTTP: as rotas da API só validam a entrada,
@@ -158,6 +158,7 @@ export async function addMessage(
         createdAt: nowIso(),
       })
       .run()
+    if (input.trace.costUsd > 0) await addLlmSpend(db, input.trace.costUsd)
   }
   const message: Message = {
     id: randomUUID(),
@@ -404,6 +405,23 @@ async function touch(db: AppDb, conversationId: string) {
 }
 
 // Demo publicada ----------------------------------------------------------
+
+/** Soma o custo de uma resposta ao gasto acumulado (no banco: vale para todas as instâncias). */
+export async function addLlmSpend(db: AppDb, costUsd: number): Promise<void> {
+  await db
+    .insert(llmUsage)
+    .values({ id: 'total', costUsd, updatedAt: nowIso() })
+    .onConflictDoUpdate({
+      target: llmUsage.id,
+      set: { costUsd: sql`${llmUsage.costUsd} + ${costUsd}`, updatedAt: nowIso() },
+    })
+    .run()
+}
+
+export async function getLlmSpend(db: AppDb): Promise<number> {
+  const row = await db.select().from(llmUsage).where(eq(llmUsage.id, 'total')).get()
+  return row?.costUsd ?? 0
+}
 
 /** Respostas do assistente desde `sinceIso`: base do teto diário de uso do LLM. */
 export async function countAgentTurnsSince(db: AppDb, sinceIso: string): Promise<number> {

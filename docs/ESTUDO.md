@@ -169,8 +169,10 @@ Na Vercel ele roda no mesmo processo porque lá não há um servidor de pé; o c
 **E se dois analistas clicarem em Assumir juntos?** O update só muda a linha se ela ainda estiver
 "aguardando analista". O segundo recebe 409 "Outro analista já assumiu". Há teste para isso.
 
-**Como protege o custo numa demo pública?** 20 mensagens por minuto por pessoa, 30 por conversa e um teto
-diário global contado no banco (`LLM_DAILY_TURN_LIMIT`).
+**Como protege o custo numa demo pública?** 20 mensagens por minuto por pessoa, 30 por conversa, um teto
+diário global de respostas (`LLM_DAILY_TURN_LIMIT`) e um teto de gasto acumulado (`LLM_BUDGET_USD=1`). O
+gasto é somado na tabela `llm_usage` a cada resposta (`addLlmSpend` em `conversations.ts`); passou do teto,
+`budgetReached` em `chat.ts` troca o modelo pelo mock e avisa. A chave da OpenRouter também tem limite de US$ 1.
 
 ## 7. Perguntas sobre o modelo
 

@@ -12,8 +12,10 @@ import {
   analystReply,
   assume,
   ConflictError,
+  addLlmSpend,
   ForbiddenError,
   getActiveConversation,
+  getLlmSpend,
   getOwnConversation,
   listMessages,
   listQueue,
@@ -46,6 +48,12 @@ async function setup(env: Record<string, string> = {}, dbPath = ':memory:') {
     }),
     authSecret: 'segredo-de-teste',
     dailyTurnLimit: Number(env.LLM_DAILY_TURN_LIMIT ?? 0),
+    budgetUsd: Number(env.LLM_BUDGET_USD ?? 0),
+    fallback: {
+      config: { ...config, llmModel: 'mock' },
+      model,
+      decision: createMockDecisionEngine(),
+    },
   }
   return { rt, service }
 }
@@ -191,6 +199,26 @@ describe('fluxo do chat', () => {
     expect(second.find((e) => e.type === 'text-delta')).toMatchObject({
       text: expect.stringContaining('limite de uso'),
     })
+  })
+
+  it('teto de gasto: soma no banco e, estourado, segue no modo demonstração', async () => {
+    const { rt } = await setup({ LLM_BUDGET_USD: '1' })
+    // Finge um provedor pago: o teto só vale fora do modo mock.
+    rt.config = { ...rt.config, llmProvider: 'openrouter', llmModel: 'anthropic/claude-haiku-5.5' }
+
+    await addLlmSpend(rt.db, 0.4)
+    await addLlmSpend(rt.db, 0.35)
+    expect(await getLlmSpend(rt.db)).toBeCloseTo(0.75)
+    const before = await collect(handleEmployeeMessage(rt, ana, 'Como está o meu chamado?'))
+    expect(before.some((e) => e.type === 'notice' && e.text.includes('limite de gasto'))).toBe(
+      false,
+    )
+
+    await addLlmSpend(rt.db, 0.3)
+    const after = await collect(handleEmployeeMessage(rt, ana, 'Como está o meu chamado?'))
+    expect(after.some((e) => e.type === 'notice' && e.text.includes('limite de gasto'))).toBe(true)
+    const trace = after.find((e) => e.type === 'trace')
+    expect(trace?.type === 'trace' && trace.trace.model).toBe('mock')
   })
 
   it('demo: conversas paradas são apagadas, as recentes ficam', async () => {

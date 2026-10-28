@@ -39,7 +39,10 @@ usar tudo e rodar os testes de graça. Para o modelo real, no `.env`:
 ```bash
 LLM_PROVIDER=openrouter
 LLM_API_KEY=sua-chave-da-openrouter
-LLM_MODEL=anthropic/claude-haiku-5.5   # trocar de modelo é só mudar esta linha
+LLM_MODEL=anthropic/claude-haiku-5.5   # trocar de modelo: esta linha e os preços abaixo
+LLM_PRICE_INPUT_PER_MTOK=0.10          # US$ por 1M tokens, usados no custo do trace
+LLM_PRICE_OUTPUT_PER_MTOK=0.50
+LLM_BUDGET_USD=1                       # teto de gasto acumulado; passou, volta ao modo mock
 DECISION_PROVIDER=llm                   # ou jev, para usar o modelo de decisão da TypeSafe
 ```
 
@@ -123,7 +126,7 @@ corpo da requisição. O serviço de chamados responde 404 para chamado de outra
 - **E2E** do fluxo principal com Playwright.
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test   # 101 testes
+pnpm typecheck && pnpm lint && pnpm test   # 102 testes
 pnpm test:e2e                              # Playwright (sobe tudo sozinho)
 pnpm eval                                  # cenários com o modelo do .env
 ```
@@ -136,6 +139,11 @@ pessoas. A OpenRouter permite trocar de modelo mudando uma variável, sem mudar 
 
 Estimativa por turno: cerca de 5 mil tokens de entrada e 300 de saída, **menos de US$ 0,001**. Uma conversa
 típica de 6 turnos fica abaixo de US$ 0,01. Os números reais saem no `docs/eval-report.md` e no console.
+
+**Teto de gasto.** `LLM_BUDGET_USD` (US$ 1 na demo) limita o gasto acumulado com o modelo. O custo de cada
+resposta é somado no banco (vale para todas as instâncias da Vercel e não zera com a limpeza da demo). Ao
+atingir o teto, o assistente avisa e segue no modo demonstração (mock), sem custo. Como segunda trava, a
+chave da OpenRouter da demo tem o mesmo limite configurado do lado da OpenRouter.
 
 **Jev (opcional).** Para o passo "entender", o Jev devolve probabilidades calibradas em cerca de 170 ms e
 custa uma fração do LLM. Fica atrás da interface `DecisionEngine` (`DECISION_PROVIDER=jev`), para comparar
@@ -175,7 +183,11 @@ Um projeto só na Vercel. O banco fica no Turso, porque a Vercel não guarda arq
 | `TICKETS_SERVICE_URL`       | `embedded`                                                            |
 | `TICKETS_SERVICE_TOKEN`     | texto aleatório                                                       |
 | `LLM_PROVIDER`              | `mock` (grátis) ou `openrouter`                                       |
-| `LLM_API_KEY` / `LLM_MODEL` | só com `openrouter`                                                   |
+| `LLM_API_KEY`               | só com `openrouter` (chave dedicada, com limite na OpenRouter)        |
+| `LLM_MODEL`                 | `anthropic/claude-haiku-5.5`                                          |
+| `LLM_PRICE_INPUT_PER_MTOK`  | `0.10`                                                                |
+| `LLM_PRICE_OUTPUT_PER_MTOK` | `0.50`                                                                |
+| `LLM_BUDGET_USD`            | `1` (teto de gasto acumulado; passou, volta ao modo mock)             |
 | `LLM_DAILY_TURN_LIMIT`      | `300` (teto de respostas por dia, protege o custo)                    |
 | `DEMO_RESET_HOURS`          | `24` (apaga conversas paradas, para cada visitante achar o app limpo) |
 | `TICKETS_FAILURE_RATE`      | `0.05`                                                                |
@@ -183,8 +195,8 @@ Um projeto só na Vercel. O banco fica no Turso, porque a Vercel não guarda arq
 4. **Deploy.** As tabelas e os dados de exemplo são criados no primeiro acesso, e a semente dos chamados é
    refeita a cada dia para a demo não envelhecer.
 
-**Limites de uso:** 20 mensagens por minuto por pessoa, 30 por conversa e o teto diário global acima, contado
-no banco (vale para todas as instâncias). Chaves só nas variáveis da plataforma, nunca no repositório.
+**Limites de uso:** 20 mensagens por minuto por pessoa, 30 por conversa, o teto diário de respostas e o teto
+de gasto de US$ 1, os dois últimos contados no banco (valem para todas as instâncias). Chaves só nas variáveis da plataforma, nunca no repositório.
 
 ## Documentação
 

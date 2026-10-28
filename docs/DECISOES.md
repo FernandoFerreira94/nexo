@@ -417,3 +417,12 @@ Ficou de fora, de propósito:
 - **Fine-tuning:** as regras do service desk ficam em código, testadas. Treinar o modelo esconderia a regra e custaria mais para mudar ao vivo.
 - **MCP:** as tools são funções internas chamadas por um único agent. MCP serve para expor tools a clientes externos, o que o desafio não pede.
 - **NestJS (ou outro backend):** o Next.js já serve a UI e as rotas da API. O serviço de chamados separado é um Hono pequeno. Um terceiro framework só adicionaria camada.
+
+## Teto de gasto de US$ 1 (28/10)
+
+Pedido do Fernando antes de publicar. `LLM_BUDGET_USD` limita o gasto acumulado com o LLM.
+
+- O custo de cada trace é somado numa tabela própria (`llm_usage`, uma linha). Não usa a soma dos traces porque a limpeza da demo apaga traces antigos, e o teto zeraria junto.
+- Estourou: o assistente segue com o modelo mock (roteiro, custo zero) e mostra um aviso, em vez de parar de responder. A demo continua navegável.
+- _Alt:_ bloquear o chat. _Trade-off:_ o visitante do portfólio ainda vê o fluxo inteiro; as respostas só ficam menos flexíveis.
+- Segunda trava fora do código: a chave da OpenRouter da demo tem limite de US$ 1 na própria OpenRouter.

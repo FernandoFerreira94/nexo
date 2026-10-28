@@ -1,5 +1,5 @@
 import type { Card, DecisionTrace, Draft, QuickReply } from '@nexo/shared'
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 /**
  * Banco do app (separado do sistema de chamados). Guarda quem é quem, as conversas,
@@ -52,6 +52,16 @@ export const decisionTraces = sqliteTable('decision_traces', {
   createdAt: text('created_at').notNull(),
 })
 
+/**
+ * Gasto acumulado com o LLM (uma linha, id `total`). Fica fora dos traces porque a limpeza da
+ * demo apaga traces antigos, e o teto de gasto não pode zerar junto.
+ */
+export const llmUsage = sqliteTable('llm_usage', {
+  id: text('id').primaryKey(),
+  costUsd: real('cost_usd').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+
 export const drafts = sqliteTable('drafts', {
   id: text('id').primaryKey(),
   conversationId: text('conversation_id').notNull(),
@@ -100,6 +110,11 @@ CREATE TABLE IF NOT EXISTS decision_traces (
   conversation_id TEXT NOT NULL,
   data TEXT NOT NULL,
   created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS llm_usage (
+  id TEXT PRIMARY KEY,
+  cost_usd REAL NOT NULL,
+  updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS drafts (
   id TEXT PRIMARY KEY,

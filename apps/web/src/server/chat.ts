@@ -10,6 +10,7 @@ import type { HandoffReason, StreamEvent } from '@nexo/shared'
 import {
   addMessage,
   countAgentTurnsSince,
+  getLlmSpend,
   countEmployeeMessage,
   getActiveConversation,
   getConversation,
@@ -70,10 +71,17 @@ export async function* handleEmployeeMessage(
     return
   }
 
+  // Teto de gasto atingido: o assistente segue no modo demonstração (roteiro, custo zero).
+  const overBudget = await budgetReached(rt)
+  const llm = overBudget ? rt.fallback : rt
+  if (overBudget) {
+    yield { type: 'notice', level: 'info', text: BUDGET_NOTICE }
+  }
+
   const turn = runTurn({
-    config: rt.config,
-    model: rt.model,
-    decision: rt.decision,
+    config: llm.config,
+    model: llm.model,
+    decision: llm.decision,
     tickets: rt.tickets,
     requesterId: user.id,
     userName: user.name,
@@ -170,6 +178,15 @@ async function persistTurn(
 
 const DAILY_LIMIT_REPLY =
   'Esta demonstração atingiu o limite de uso do assistente por hoje. Volte amanhã ou fale com um analista.'
+
+const BUDGET_NOTICE =
+  'O limite de gasto com IA desta demonstração foi atingido. O assistente segue no modo demonstração, com respostas de roteiro.'
+
+/** Teto de gasto acumulado (`LLM_BUDGET_USD`), somado no banco a cada resposta. */
+async function budgetReached(rt: Runtime): Promise<boolean> {
+  if (rt.budgetUsd <= 0 || rt.config.llmProvider === 'mock') return false
+  return (await getLlmSpend(rt.db)) >= rt.budgetUsd
+}
 
 /** Teto global por dia (UTC), contado nos traces salvos: vale para todas as instâncias. */
 async function dailyLimitReached(rt: Runtime): Promise<boolean> {

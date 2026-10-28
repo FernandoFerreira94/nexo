@@ -22,6 +22,10 @@ export type Runtime = {
   authSecret: string
   /** Teto global de respostas do assistente por dia (0 = sem teto). Protege o custo da demo. */
   dailyTurnLimit: number
+  /** Teto de gasto acumulado com o LLM em US$ (0 = sem teto). Estourou: usa o modo demonstração. */
+  budgetUsd: number
+  /** Modelo de roteiro (mock), usado quando o teto de gasto é atingido. Não custa nada. */
+  fallback: { config: AgentConfig; model: LanguageModel; decision: DecisionEngine }
 }
 
 /** Valor de TICKETS_SERVICE_URL que liga o serviço de chamados dentro deste processo (Vercel). */
@@ -45,6 +49,15 @@ export async function createRuntime(
     await pruneStaleConversations(db, new Date(Date.now() - resetHours * 3_600_000).toISOString())
   }
 
+  const fallbackConfig: AgentConfig = {
+    ...config,
+    llmProvider: 'mock',
+    llmModel: 'mock',
+    priceInputPerMTok: 0,
+    priceOutputPerMTok: 0,
+  }
+  const fallbackModel = createChatModel(fallbackConfig)
+
   return {
     db,
     config,
@@ -64,6 +77,12 @@ export async function createRuntime(
     }),
     authSecret,
     dailyTurnLimit: Number(env.LLM_DAILY_TURN_LIMIT ?? 0),
+    budgetUsd: Number(env.LLM_BUDGET_USD ?? 0),
+    fallback: {
+      config: fallbackConfig,
+      model: fallbackModel,
+      decision: createDecisionEngine(fallbackConfig, fallbackModel),
+    },
   }
 }
 
