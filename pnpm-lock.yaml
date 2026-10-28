@@ -72,6 +72,9 @@ importers:
       '@nexo/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@nexo/tickets-service':
+        specifier: workspace:*
+        version: link:../tickets-service
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -103,9 +106,6 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
-      '@nexo/tickets-service':
-        specifier: workspace:*
-        version: link:../tickets-service
       '@tailwindcss/postcss':
         specifier: 4.3.3
         version: 4.3.3
